@@ -1,10 +1,10 @@
 from setuptools import setup
 
 setup(
-    name="SocialSim",
+    name="Matrix",
     version="0.0.1",
 
-    packages=["socialsim"],
+    packages=["matrix"],
 
     install_requires=[
         "Click",
@@ -15,7 +15,7 @@ setup(
 
     entry_points="""
         [console_scripts]
-        socialsim=socialsim:cli
+        matrix=matrix:cli
     """,
 
     description="An modeling framework for social agent simuation.",
