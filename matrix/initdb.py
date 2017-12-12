@@ -6,11 +6,6 @@ import time
 import json
 import random
 import sqlite3
-from os.path import dirname, join
-
-_curdir = dirname(__file__)
-_projroot = dirname(_curdir)
-_event_db_schema_fname = join(_projroot, "event_db_schema.sql")
 
 def main_initdb(event_db, num_agents, num_repos, start_time_real):
     """
@@ -24,7 +19,24 @@ def main_initdb(event_db, num_agents, num_repos, start_time_real):
         return
 
     con = sqlite3.connect(event_db)
-    con.executescript(open(_event_db_schema_fname).read())
+
+    schema_sql = """
+    create table
+    event (
+        agent_id bigint,
+        repo_id bigint,
+        ltime bigint, -- logical time
+        rtime bigint, -- real time, unix timestamps
+        event_type text,
+        payload text
+    );
+
+    create index
+    idx1 on event (agent_id, repo_id);
+    create index
+    idx2 on event (repo_id);
+    """
+    con.executescript(schema_sql)
 
     # Create the list of agent and repo ids
     # This will be more complex when number of agents
