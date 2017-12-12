@@ -8,6 +8,7 @@ import random
 import sqlite3
 
 import logbook
+import gevent
 from gevent.event import Event
 from gevent.server import StreamServer
 from jsonrpc import JSONRPCResponseManager, Dispatcher
@@ -25,12 +26,20 @@ class Controller: # pylint: disable=too-many-instance-attributes
         self.num_rounds = num_rounds
         self.start_time_real = start_time_real
         self.period_real = period_real
+
+        # NOTE: This is a hack
+        # The server needs the controller, and controller needs server.
+        # Thus after creation of both, the server attribute needs to be set
+        # from the outside.
+        self.server = None
+
         self.event_db = sqlite3.connect(event_db_dsn)
 
         self.cur_round = 1
         self.start_event = Event()
         self.num_started = 0
         self.num_finished = 0
+        self.num_exited = 0
 
         self.event_list = []
 
@@ -45,6 +54,11 @@ class Controller: # pylint: disable=too-many-instance-attributes
         """
 
         if self.cur_round > self.num_rounds:
+            self.num_exited += 1
+
+            if self.num_exited == self.num_agents:
+                self.server.stop()
+
             _log.info("Sending exit response.")
             return -1
 
@@ -144,6 +158,7 @@ def main_controller(address, event_db, num_agents, num_rounds, start_time_real, 
     _log.notice('Starting echo server on: {0}', address_str)
 
     controller = Controller(event_db, num_agents, num_rounds, start_time_real, period_real)
-
     server = StreamServer(address, controller.serve)
+    controller.server = server
+
     server.serve_forever()
