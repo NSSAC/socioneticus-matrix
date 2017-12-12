@@ -3,6 +3,7 @@ Matrix: Controller
 """
 
 import json
+import time
 import random
 import sqlite3
 
@@ -44,20 +45,21 @@ class Controller: # pylint: disable=too-many-instance-attributes
         """
 
         if self.cur_round > self.num_rounds:
+            _log.info("Sending exit response.")
             return -1
 
         cur_round = self.cur_round
         self.num_started += 1
         if self.num_started < self.num_agents:
-            print("Waiting ...")
+            _log.info("Waiting for next round.")
             self.start_event.wait()
         else:
-            print("Clearing ...")
+            _log.info("Last agent finished.")
             self.start_event.set()
             self.start_event.clear()
             self.num_started = 0
             self.cur_round += 1
-        print("Send start signal ...")
+        _log.info("Sending ready signal.")
         return cur_round
 
     def register_events(self, events):
@@ -65,9 +67,11 @@ class Controller: # pylint: disable=too-many-instance-attributes
         Method called by agents to register events.
         """
 
-        print("Received events ...")
+        _log.info("Received {0} events.", len(events))
         for event in events:
             ltime = event["round_num"]
+
+            ## Generate the real time
             rtime = self.start_time_real
             rtime += self.period_real * (ltime - 1)
             rtime += random.randint(0, self.period_real)
@@ -76,12 +80,12 @@ class Controller: # pylint: disable=too-many-instance-attributes
         self.event_list.extend(events)
         self.num_finished += 1
 
+        # If there are more agents to finish
+        # return quickly
         if self.num_finished < self.num_agents:
             return True
 
-        self.num_finished = 0
-        print("Flushing %d events" % len(self.event_list))
-
+        _log.info("Flushing {0} events to database.", len(self.event_list))
         with self.event_db:
             cur = self.event_db.cursor()
             insert_sql = "insert into event values (?,?,?,?,?,?)"
@@ -97,7 +101,9 @@ class Controller: # pylint: disable=too-many-instance-attributes
                 row = (agent_id, repo_id, ltime, rtime, event_type, payload)
                 cur.execute(insert_sql, row)
 
+        self.num_finished = 0
         self.event_list = []
+        return True
 
     def serve(self, sock, address):
         """
@@ -119,15 +125,25 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
             _log.info("{0} disconnected", address_str)
 
-def main_controller(address, event_db_dsn, num_agents, num_rounds, start_time_real, period_real):
+def main_controller(address, event_db, num_agents, num_rounds, start_time_real, period_real):
     """
     Controller process starting point.
     """
 
+    logbook.StderrHandler().push_application()
+
+    # Convert address to tuple format
+    # Input format: 127.0.0.1:1600
+    address = address.strip().split(":")
+    address = (address[0], int(address[1]))
+
+    if start_time_real == 0:
+        start_time_real = int(time.time())
+
     address_str = ":".join(map(str, address))
     _log.notice('Starting echo server on: {0}', address_str)
 
-    controller = Controller(event_db_dsn, num_agents, num_rounds, start_time_real, period_real)
+    controller = Controller(event_db, num_agents, num_rounds, start_time_real, period_real)
 
     server = StreamServer(address, controller.serve)
     server.serve_forever()
