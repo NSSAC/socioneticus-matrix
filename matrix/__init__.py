@@ -6,7 +6,7 @@ import click
 import logbook
 
 from .controller import main_controller
-from .agent import main_agent
+from .simpleagent import main_agent
 
 ENVVAR_ADDRESS = "MATRIX_ADDRESS"
 ENVVAR_EVENT_DB = "MATRIX_EVENT_DB"
@@ -46,7 +46,7 @@ def controller(address, event_db, num_agents):
               envvar=ENVVAR_EVENT_DB,
               required=True,
               help="Event database location")
-def agent(address, event_db):
+def simpleagent(address, event_db):
 
     # Convert address to tuple format
     # Input format: 127.0.0.1:1600
