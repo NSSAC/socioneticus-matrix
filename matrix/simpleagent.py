@@ -5,6 +5,7 @@ Matrix: Simple agent process.
 import json
 import time
 import socket
+import sqlite3
 from random import randint
 from uuid import uuid4
 
@@ -38,7 +39,7 @@ class RPCProxy: # pylint: disable=too-few-public-methods
             "method": method,
             "params": params
         }
-        msg = json.dumps(msg) + "\n" # The newline is important
+        msg = json.dumps(msg) + "\n" # NOTE: The newline is important
         msg = msg.encode("ascii")
         self.sock.sendall(msg)
 
@@ -52,31 +53,78 @@ class RPCProxy: # pylint: disable=too-few-public-methods
 
         return ret["result"]
 
-
-def main_agent(address, _event_db):
+def main_agent(address, event_db_dsn, agent_id):
     """
-    Dummy agent.
+    Simple agent.
 
-    For 10 rounds keep sending the canned push event.
+    Agent Logic:
+        Find out the repos that I have created (should already be in event db).
+        If I have not pushed a commit to the repo in the last round,
+        push a new commit to the repo.
     """
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect(address)
-
         proxy = RPCProxy(sock)
 
-        rounds = 10
-        for _ in range(rounds):
-            proxy.call("can_we_start_yet")
+        con = sqlite3.connect(event_db_dsn)
+        cur = con.cursor()
 
-            sleep_time = randint(1, 5)
-            print("Sleeping for %d seconds" % sleep_time)
-            time.sleep(sleep_time)
+        # Select the repos which I have created
+        sql = """
+            select repo_id
+            from event
+            where
+                agent_id = ?
+                and event_type = 'CreateEvent'
+            """
+        cur.execute(sql, (agent_id,))
+        repo_ids = [row[0] for row in cur]
 
-            events = [{
-                "actor": { "id": 111111 },
-                "repo": { "id": 222222 },
-                "type": "PushEvent",
-                "payload": { "push_id": 333333, }
-            }]
-            proxy.call("register_events", events=events)
+        while True:
+            round_num = proxy.call("can_we_start_yet")
+
+            # if round is -1 we end the simulation
+            if round_num == -1:
+                return
+
+            for repo_id in repo_ids:
+                sql = """
+                    select count(*)
+                    from event
+                    where
+                        agent_id = ?
+                        and repo_id = ?
+                        and ltime = ?
+                        and event_type = 'PushEvent'
+                    """
+                row = (agent_id, repo_id, round_num - 1)
+                cur.execute(sql, row)
+
+                # We made a push to the repo last round
+                # So we send an empty event list this round
+                if cur.fetchone()[0] > 0:
+                    events = []
+
+                # We will push some code now
+                else:
+                    # Coding is hard
+                    # Take a nap
+                    sleep_time = randint(1, 5)
+                    print("Sleeping for %d seconds" % sleep_time)
+                    time.sleep(sleep_time)
+
+                    events = [{
+                        "actor": { "id": agent_id },
+                        "repo": { "id": repo_id },
+                        "type": "PushEvent",
+                        "payload": { },
+
+                        # NOTE: This is a extra field not in real data,
+                        # that we add to the generate events.
+                        # Adding this to the events is mandatory
+                        "round_num": round_num,
+                    }]
+
+                # Send the events to the controller
+                proxy.call("register_events", events=events)

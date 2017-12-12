@@ -2,8 +2,9 @@
 Matrix: Controller
 """
 
-from os.path import dirname
-
+import json
+import random
+import sqlite3
 
 import logbook
 from gevent.event import Event
@@ -11,18 +12,21 @@ from gevent.server import StreamServer
 from jsonrpc import JSONRPCResponseManager, Dispatcher
 
 _log = logbook.Logger(__name__)
-_curdir = dirname(__file__)
 
-class Controller:
+class Controller: # pylint: disable=too-many-instance-attributes
     """
     Controller object.
     """
 
-    def __init__(self, event_db_dsn, num_agents):
+    def __init__(self, event_db_dsn, num_agents, num_rounds, start_time_real, period_real):
         self.event_db_dsn = event_db_dsn
         self.num_agents = num_agents
-        #self.event_db = sqlite3.connect(event_db_dsn)
+        self.num_rounds = num_rounds
+        self.start_time_real = start_time_real
+        self.period_real = period_real
+        self.event_db = sqlite3.connect(event_db_dsn)
 
+        self.cur_round = 1
         self.start_event = Event()
         self.num_started = 0
         self.num_finished = 0
@@ -39,6 +43,10 @@ class Controller:
         Method called by agents to start executing current round.
         """
 
+        if self.cur_round > self.num_rounds:
+            return -1
+
+        cur_round = self.cur_round
         self.num_started += 1
         if self.num_started < self.num_agents:
             print("Waiting ...")
@@ -48,8 +56,9 @@ class Controller:
             self.start_event.set()
             self.start_event.clear()
             self.num_started = 0
+            self.cur_round += 1
         print("Send start signal ...")
-        return True
+        return cur_round
 
     def register_events(self, events):
         """
@@ -57,6 +66,13 @@ class Controller:
         """
 
         print("Received events ...")
+        for event in events:
+            ltime = event["round_num"]
+            rtime = self.start_time_real
+            rtime += self.period_real * (ltime - 1)
+            rtime += random.randint(0, self.period_real)
+            event["time"] = rtime
+
         self.event_list.extend(events)
         self.num_finished += 1
 
@@ -65,6 +81,22 @@ class Controller:
 
         self.num_finished = 0
         print("Flushing %d events" % len(self.event_list))
+
+        with self.event_db:
+            cur = self.event_db.cursor()
+            insert_sql = "insert into event values (?,?,?,?,?,?)"
+
+            for event in self.event_list:
+                agent_id = event["actor"]["id"]
+                repo_id = event["repo"]["id"]
+                event_type = event["type"]
+                payload = json.dumps(event["payload"])
+                ltime = event["round_num"]
+                rtime = event["time"]
+
+                row = (agent_id, repo_id, ltime, rtime, event_type, payload)
+                cur.execute(insert_sql, row)
+
         self.event_list = []
 
     def serve(self, sock, address):
@@ -87,7 +119,7 @@ class Controller:
 
             _log.info("{0} disconnected", address_str)
 
-def main_controller(address, event_db_dsn, num_agents):
+def main_controller(address, event_db_dsn, num_agents, num_rounds, start_time_real, period_real):
     """
     Controller process starting point.
     """
@@ -95,7 +127,7 @@ def main_controller(address, event_db_dsn, num_agents):
     address_str = ":".join(map(str, address))
     _log.notice('Starting echo server on: {0}', address_str)
 
-    controller = Controller(event_db_dsn, num_agents)
+    controller = Controller(event_db_dsn, num_agents, num_rounds, start_time_real, period_real)
 
     server = StreamServer(address, controller.serve)
     server.serve_forever()
