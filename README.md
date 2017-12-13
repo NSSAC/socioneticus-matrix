@@ -71,11 +71,11 @@ in the current simulation and that the simulation will run for 10 rounds.
 
 In the second terminal window execute the following command.
 
-$ matrix simpleagent --address 127.0.0.1:16001 --event-db ./events.db --agent-id 1
+$ matrix simpleagent --address 127.0.0.1:16001 --event-db ./event.db --agent-id 1
 
 In the third terminal window execute the following command.
 
-$ matrix simpleagent --address 127.0.0.1:16001 --event-db ./events.db --agent-id 2
+$ matrix simpleagent --address 127.0.0.1:16001 --event-db ./event.db --agent-id 2
 
 The above commands start two simple agent processes. The agent processes
 are given the address of the controller process and location of the events file.
