@@ -155,7 +155,7 @@ def main_controller(address, event_db, num_agents, num_rounds, start_time_real, 
         start_time_real = int(time.time())
 
     address_str = ":".join(map(str, address))
-    _log.notice('Starting echo server on: {0}', address_str)
+    _log.notice('Starting controller on: {0}', address_str)
 
     controller = Controller(event_db, num_agents, num_rounds, start_time_real, period_real)
     server = StreamServer(address, controller.serve)

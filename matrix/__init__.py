@@ -14,6 +14,10 @@ ENVVAR_EVENT_DB = "MATRIX_EVENT_DB"
 
 @click.group()
 def cli():
+    """
+    Matrix: A distributed ABM platform.
+    """
+
     pass
 
 @cli.command()
