@@ -32,7 +32,7 @@ $ . matrxienv/bin/activate
 Copy the current version of the matrix source in the current directory,
 and execute the following command.
 
-$ pip install ./Matrix-<Version>.tar.gz
+$ pip install ./Matrix-VERSION.tar.gz
 
 The above should make the matrix command available.
 You can check if installation was successful with the following command.
