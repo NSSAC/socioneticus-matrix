@@ -12,10 +12,11 @@ def main_initdb(event_db, num_agents, num_repos, start_time_real):
     Initialize a db with num_repos created by num_agents.
     """
 
-    # This is only a temp constraint for the simple agents
-    # There is no need for this to be there with the full agents.
-    if not num_repos == num_agents:
-        print("Need equal number of repos and agents.")
+    if not num_repos > 0:
+        print("Number of repos needs to be > 0")
+        return
+    if not num_agents > 0:
+        print("Number of agents needs to be > 0")
         return
 
     con = sqlite3.connect(event_db)
@@ -39,11 +40,11 @@ def main_initdb(event_db, num_agents, num_repos, start_time_real):
     con.executescript(schema_sql)
 
     # Create the list of agent and repo ids
-    # This will be more complex when number of agents
-    # and the number of repos are different
     repo_ids = list(range(1, num_repos + 1))
     agent_ids = list(range(1, num_agents + 1))
-    repo_owners = agent_ids
+
+    # Select a random owner for every repo
+    repo_owners = [random.choice(agent_ids) for _ in repo_ids]
 
     if start_time_real == 0:
         start_time_real = int(time.time())
