@@ -48,13 +48,17 @@ class Controller: # pylint: disable=too-many-instance-attributes
             "register_events": self.register_events,
         })
 
-    def can_we_start_yet(self):
+    def can_we_start_yet(self, n_agents=1):
         """
         Method called by agents to start executing current round.
+
+        n_agents: number of agents who are jointly making this request.
         """
 
+        n_agents = int(n_agents)
+
         if self.cur_round > self.num_rounds:
-            self.num_exited += 1
+            self.num_exited += n_agents
 
             if self.num_exited == self.num_agents:
                 self.server.stop()
@@ -63,7 +67,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
             return -1
 
         cur_round = self.cur_round
-        self.num_started += 1
+        self.num_started += n_agents
         if self.num_started < self.num_agents:
             _log.info("Waiting for next round.")
             self.start_event.wait()
@@ -76,10 +80,15 @@ class Controller: # pylint: disable=too-many-instance-attributes
         _log.info("Sending ready signal.")
         return cur_round
 
-    def register_events(self, events):
+    def register_events(self, events, n_agents=1):
         """
         Method called by agents to register events.
+
+        events: list of events generated jointly by the agents.
+        n_agents: number of agents who are jointly making this request.
         """
+
+        n_agents = int(n_agents)
 
         _log.info("Received {0} events.", len(events))
         for event in events:
@@ -92,7 +101,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
             event["time"] = rtime
 
         self.event_list.extend(events)
-        self.num_finished += 1
+        self.num_finished += n_agents
 
         # If there are more agents to finish
         # return quickly
