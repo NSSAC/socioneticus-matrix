@@ -21,6 +21,15 @@ def main_initdb(event_db, num_agents, num_repos, start_time_real):
 
     con = sqlite3.connect(event_db)
 
+    # Some simple optimizations
+    # Use larger block size
+    # Use WAL journal mode
+    pragma_sql = """
+    PRAGMA page_size = 65536;
+    PRAGMA journal_mode = WAL;
+    """
+    con.executescript(pragma_sql)
+
     schema_sql = """
     create table
     event (
