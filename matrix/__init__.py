@@ -8,7 +8,8 @@ import click
 import logbook
 
 from .controller import main_controller
-from .simpleagent import main_agent as main_simpleagent
+from .simpleagent import main_agent_single as main_simpleagent_single, \
+                            main_agent_multi as main_simpleagent_multi
 from .thresholdagent import main_agent_single as main_thresholdagent_single, \
                             main_agent_multi as main_thresholdagent_multi
 from .initdb import main_initdb
@@ -90,15 +91,33 @@ def initdb(**kwargs):
               type=click.Path(exists=True, dir_okay=False),
               help="Event database location")
 @click.option("-i", "--agent-id",
-              required=True,
               type=int,
               help="The ID of the agent")
+@click.option("-I", "--agent-id-range",
+              nargs=2,
+              type=int,
+              help="The start and stop range of the agent IDs (endpoints are inclusive)")
 def simpleagent(**kwargs):
     """
     Start a simple agent process.
     """
+    agent_id = kwargs.pop("agent_id")
+    agent_id_range = kwargs.pop("agent_id_range")
 
-    return main_simpleagent(**kwargs)
+    if bool(agent_id) == bool(agent_id_range):
+        print("Specifying only one of --agent-id and --agent-id-range is required.", file=sys.stderr)
+        return 1
+
+    if agent_id:
+        kwargs["agent_id"] = agent_id
+        return main_simpleagent_single(**kwargs)
+
+    start, stop = agent_id_range
+    agent_ids = list(range(start, stop + 1))
+    kwargs["agent_ids"] = agent_ids
+    return main_simpleagent_multi(**kwargs)
+
+    # return main_simpleagent(**kwargs)
 
 @cli.command()
 @click.option("-a", "--address",
