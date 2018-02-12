@@ -7,7 +7,7 @@ import json
 import random
 import sqlite3
 
-def main_initdb(event_db, num_agents, num_repos, start_time_real):
+def main_initdb(event_db, num_agents, num_repos, ownership_model, start_time_real):
     """
     Initialize a db with num_repos created by num_agents.
     """
@@ -52,8 +52,25 @@ def main_initdb(event_db, num_agents, num_repos, start_time_real):
     repo_ids = list(range(1, num_repos + 1))
     agent_ids = list(range(1, num_agents + 1))
 
-    # Select a random owner for every repo
-    repo_owners = [random.choice(agent_ids) for _ in repo_ids]
+    if ownership_model == "independent":
+        # For every repo select owner are selected iid
+        repo_owners = random.choices(agent_ids, k=num_repos)
+    elif ownership_model == "balanced":
+        # every agent owns at-least floor(num_repos / num_agent) repos
+        repo_owners = agent_ids * (num_repos // num_agents)
+        repo_owners += random.sample(agent_ids, num_repos % num_agents)
+        assert len(repo_owners) == len(repo_ids)
+        random.shuffle(repo_owners)
+    elif ownership_model == "preferential":
+        # The more repos you own now, the more you will own later
+        pool = list(agent_ids)
+        repo_owners = []
+        for _ in repo_ids:
+            agent_id = random.choice(pool)
+            repo_owners.append(agent_id)
+            pool.append(agent_id)
+    else:
+        raise ValueError(f"Unknown ownership model '{ownership_model}'")
 
     if start_time_real == 0:
         start_time_real = int(time.time())

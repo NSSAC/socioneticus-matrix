@@ -70,6 +70,10 @@ def controller(**kwargs):
               required=True,
               type=int,
               help="Number of repos")
+@click.option("-o", "--ownership-model",
+              type=click.Choice(["independent", "balanced", "preferential"]),
+              default="balanced",
+              help="Repo ownership model")
 @click.option("-t", "--start-time-real",
               default=0,
               help="Start time (real time) of the simulation")
