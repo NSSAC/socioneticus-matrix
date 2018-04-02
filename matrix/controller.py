@@ -3,12 +3,10 @@ Matrix: Controller
 """
 
 import json
-import time
+import gzip
 import random
-import sqlite3
 
 import logbook
-import gevent
 from gevent.event import Event
 from gevent.server import StreamServer
 from jsonrpc import JSONRPCResponseManager, Dispatcher
@@ -20,12 +18,18 @@ class Controller: # pylint: disable=too-many-instance-attributes
     Controller object.
     """
 
-    def __init__(self, event_db_dsn, num_agents, num_rounds, start_time_real, period_real):
-        self.event_db_dsn = event_db_dsn
-        self.num_agents = num_agents
-        self.num_rounds = num_rounds
-        self.start_time_real = start_time_real
-        self.period_real = period_real
+    def __init__(self, config, runtime_store):
+        self.num_agentprocs = config.num_agentprocs
+        self.num_rounds = config.num_rounds
+        self.start_time = config.start_time
+        self.round_time = config.round_time
+        self.log_fname = config.log_fname
+        self.controller_seed = config.controller_seed
+
+        self.runtime_store = runtime_store
+
+        random.seed(self.controller_seed)
+        self.agentproc_seeds = [random.randint(0, 2 ** 32 -1) for _ in range(self.num_agentprocs)]
 
         # NOTE: This is a hack
         # The server needs the controller, and controller needs server.
@@ -33,100 +37,75 @@ class Controller: # pylint: disable=too-many-instance-attributes
         # from the outside.
         self.server = None
 
-        self.event_db = sqlite3.connect(event_db_dsn)
+        self.log_fobj = gzip.open(self.log_fname, "at", encoding="utf-8", compresslevel=6)
 
-        self.cur_round = 1
+        self.cur_round = 0
+        self.num_waiting = 0
         self.start_event = Event()
-        self.num_started = 0
-        self.num_finished = 0
-        self.num_exited = 0
-
-        self.event_list = []
 
         self.dispatcher = Dispatcher({
             "can_we_start_yet": self.can_we_start_yet,
             "register_events": self.register_events,
+            "get_agentproc_seed": self.get_agentproc_seed
         })
 
-    def can_we_start_yet(self, n_agents=1):
+    def can_we_start_yet(self):
         """
-        Method called by agents to start executing current round.
-
-        n_agents: number of agents who are jointly making this request.
+        RPC method, returns when agent process to allowed to begin executing current round.
         """
 
-        n_agents = int(n_agents)
-
-        if self.cur_round > self.num_rounds:
-            self.num_exited += n_agents
-
-            if self.num_exited == self.num_agents:
-                self.server.stop()
-
-            _log.info("Sending exit response.")
-            return -1
-
-        cur_round = self.cur_round
-        self.num_started += n_agents
-        if self.num_started < self.num_agents:
-            _log.info("Waiting for next round.")
+        self.num_waiting += 1
+        if self.num_waiting < self.num_agentprocs:
+            _log.info(f"{self.num_waiting}/{self.num_agentprocs} agent processes are waiting.")
             self.start_event.wait()
         else:
-            _log.info("Last agent finished.")
+            _log.info(f"{self.num_waiting}/{self.num_agentprocs} agent processes are ready.")
+
+            self.runtime_store.flush()
+            self.num_waiting = 0
+            self.cur_round += 1
+
+            if self.cur_round == self.num_rounds:
+                self.server.stop()
+                self.log_fobj.close()
+                self.runtime_store.close()
+
             self.start_event.set()
             self.start_event.clear()
-            self.num_started = 0
-            self.cur_round += 1
-        _log.info("Sending ready signal.")
-        return cur_round
 
-    def register_events(self, events, n_agents=1):
+        if self.cur_round == self.num_rounds:
+            return {
+                "cur_round": -1,
+                "start_time": -1,
+                "end_time": -1
+            }
+
+        return {
+            "cur_round": self.cur_round,
+            "start_time": self.start_time + self.round_time * (self.cur_round - 1),
+            "end_time": self.start_time + self.round_time * self.cur_round
+        }
+
+    def register_events(self, events):
         """
-        Method called by agents to register events.
+        RPC method, used by agent processes to hand over generated events to the system.
 
-        events: list of events generated jointly by the agents.
-        n_agents: number of agents who are jointly making this request.
+        events: list of events.
         """
 
-        n_agents = int(n_agents)
-
-        _log.info("Received {0} events.", len(events))
         for event in events:
-            ltime = event["round_num"]
-
-            ## Generate the real time
-            rtime = self.start_time_real
-            rtime += self.period_real * (ltime - 1)
-            rtime += random.randint(0, self.period_real)
-            event["time"] = rtime
-
-        self.event_list.extend(events)
-        self.num_finished += n_agents
-
-        # If there are more agents to finish
-        # return quickly
-        if self.num_finished < self.num_agents:
-            return True
-
-        _log.info("Flushing {0} events to database.", len(self.event_list))
-        with self.event_db:
-            cur = self.event_db.cursor()
-            insert_sql = "insert into event values (?,?,?,?,?,?)"
-
-            for event in self.event_list:
-                agent_id = event["actor"]["id"]
-                repo_id = event["repo"]["id"]
-                event_type = event["type"]
-                payload = json.dumps(event["payload"])
-                ltime = event["round_num"]
-                rtime = event["time"]
-
-                row = (agent_id, repo_id, ltime, rtime, event_type, payload)
-                cur.execute(insert_sql, row)
-
-        self.num_finished = 0
-        self.event_list = []
+            self.log_fobj.write(json.dumps(event) + "\n")
+        self.runtime_store.handle_events(events)
         return True
+
+    def get_agentproc_seed(self, agentproc_id):
+        """
+        RPC method, used by agent processes to retrive random seed.
+
+        agentproc_id: ID of the agent process (starts at 1)
+        """
+
+        return self.agentproc_seeds[agentproc_id -1]
 
     def serve(self, sock, address):
         """
@@ -134,7 +113,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
         """
 
         address_str = ":".join(map(str, address))
-        _log.info("New connection from {0}", address_str)
+        _log.info(f"New connection from {address_str}")
 
         # We are expecting json only
         # So encoding ascii shoud be sufficient
@@ -146,27 +125,21 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
                 sock.sendall(response)
 
-            _log.info("{0} disconnected", address_str)
+            _log.info(f"{address_str} disconnected")
 
-def main_controller(address, event_db, num_agents, num_rounds, start_time_real, period_real):
+def main_controller(port, config, runtime_store):
     """
     Controller process starting point.
     """
 
     logbook.StderrHandler().push_application()
 
-    # Convert address to tuple format
-    # Input format: 127.0.0.1:1600
-    address = address.strip().split(":")
-    address = (address[0], int(address[1]))
-
-    if start_time_real == 0:
-        start_time_real = int(time.time())
+    address = ("127.0.0.1", int(port))
 
     address_str = ":".join(map(str, address))
-    _log.notice('Starting controller on: {0}', address_str)
+    _log.notice(f"Starting controller on: {address_str}")
 
-    controller = Controller(event_db, num_agents, num_rounds, start_time_real, period_real)
+    controller = Controller(config, runtime_store)
     server = StreamServer(address, controller.serve)
     controller.server = server
 
