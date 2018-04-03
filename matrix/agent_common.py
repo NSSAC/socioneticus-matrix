@@ -18,14 +18,11 @@ class RPCProxy: # pylint: disable=too-few-public-methods
     RPC Proxy class for calling controller functions.
     """
 
-    def __init__(self, address):
-        # Convert address to tuple format
-        # Input format: 127.0.0.1:1600
-        address = address.strip().split(":")
-        address = (address[0], int(address[1]))
+    def __init__(self, port):
+        address = ("127.0.0.1", port)
 
         address_str = ":".join(map(str, address))
-        _log.notice('Connecting to controller at: {0}', address_str)
+        _log.notice(f"Connecting to controller at: {address_str}")
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect(address)

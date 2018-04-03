@@ -5,6 +5,7 @@ Matrix: Controller
 import json
 import gzip
 import random
+import importlib
 
 import logbook
 from gevent.event import Event
@@ -18,17 +19,17 @@ class Controller: # pylint: disable=too-many-instance-attributes
     Controller object.
     """
 
-    def __init__(self, config, runtime_store):
-        self.num_agentprocs = config.num_agentprocs
-        self.num_rounds = config.num_rounds
-        self.start_time = config.start_time
-        self.round_time = config.round_time
-        self.log_fname = config.log_fname
-        self.controller_seed = config.controller_seed
+    def __init__(self, config, state_store):
+        self.num_agentprocs = config["num_agentprocs"]
+        self.num_rounds = config["num_rounds"]
+        self.start_time = config["start_time"]
+        self.round_time = config["round_time"]
+        self.log_fname = config["log_fname"]
+        self.controller_seed = config["controller_seed"]
 
-        self.runtime_store = runtime_store
+        self.state_store = state_store
 
-        random.seed(self.controller_seed)
+        random.seed(self.controller_seed, version=2)
         self.agentproc_seeds = [random.randint(0, 2 ** 32 -1) for _ in range(self.num_agentprocs)]
 
         # NOTE: This is a hack
@@ -61,14 +62,14 @@ class Controller: # pylint: disable=too-many-instance-attributes
         else:
             _log.info(f"{self.num_waiting}/{self.num_agentprocs} agent processes are ready.")
 
-            self.runtime_store.flush()
+            self.state_store.flush()
             self.num_waiting = 0
             self.cur_round += 1
 
             if self.cur_round == self.num_rounds:
                 self.server.stop()
                 self.log_fobj.close()
-                self.runtime_store.close()
+                self.state_store.close()
 
             self.start_event.set()
             self.start_event.clear()
@@ -82,8 +83,8 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
         return {
             "cur_round": self.cur_round,
-            "start_time": self.start_time + self.round_time * (self.cur_round - 1),
-            "end_time": self.start_time + self.round_time * self.cur_round
+            "start_time": int(self.start_time + self.round_time * (self.cur_round - 1)),
+            "end_time": int(self.start_time + self.round_time * self.cur_round)
         }
 
     def register_events(self, events):
@@ -95,7 +96,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
         for event in events:
             self.log_fobj.write(json.dumps(event) + "\n")
-        self.runtime_store.handle_events(events)
+        self.state_store.handle_events(events)
         return True
 
     def get_agentproc_seed(self, agentproc_id):
@@ -127,19 +128,25 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
             _log.info(f"{address_str} disconnected")
 
-def main_controller(port, config, runtime_store):
+def main_controller(**kwargs):
     """
     Controller process starting point.
     """
 
     logbook.StderrHandler().push_application()
 
-    address = ("127.0.0.1", int(port))
+    port = kwargs.pop("ctrl_port")
+    state_store_module = kwargs.pop("state_store_module")
+    state_dsn = kwargs.pop("state_dsn")
+
+    address = ("127.0.0.1", port)
+    state_store_module = importlib.import_module(state_store_module)
+    state_store = state_store_module.get_state_store(state_dsn)
 
     address_str = ":".join(map(str, address))
     _log.notice(f"Starting controller on: {address_str}")
 
-    controller = Controller(config, runtime_store)
+    controller = Controller(kwargs, state_store)
     server = StreamServer(address, controller.serve)
     controller.server = server
 

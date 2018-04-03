@@ -8,14 +8,8 @@ import click
 import logbook
 
 from .controller import main_controller
-from .simpleagent import main_agent_single as main_simpleagent_single, \
-                            main_agent_multi as main_simpleagent_multi
-from .thresholdagent import main_agent_single as main_thresholdagent_single, \
-                            main_agent_multi as main_thresholdagent_multi
-from .initdb import main_initdb
-
-ENVVAR_ADDRESS = "MATRIX_ADDRESS"
-ENVVAR_EVENT_DB = "MATRIX_EVENT_DB"
+from .initstore import main_initstore
+from .dummyagent import main_dummyagent
 
 @click.group()
 def cli():
@@ -26,29 +20,42 @@ def cli():
     pass
 
 @cli.command()
-@click.option("-a", "--address",
-              envvar=ENVVAR_ADDRESS,
-              required=True,
-              help="Controller address in the format [IP:PORT]")
-@click.option("-e", "--event-db",
-              envvar=ENVVAR_EVENT_DB,
-              required=True,
-              type=click.Path(exists=True, dir_okay=False, writable=True),
-              help="Event database location")
-@click.option("-n", "--num-agents",
+@click.option("-p", "--ctrl-port",
               required=True,
               type=int,
-              help="Number of agents")
+              help="Controller port")
+@click.option("-l", "--log-fname",
+              required=True,
+              type=click.Path(dir_okay=False, writable=True),
+              help="Event log file location")
+@click.option("-s", "--state-dsn",
+              required=True,
+              type=click.Path(exists=True, dir_okay=False, writable=True),
+              help="System state data source name")
+@click.option("-m", "--state-store-module",
+              required=True,
+              type=str,
+              help="State store module")
+@click.option("-n", "--num-agentprocs",
+              required=True,
+              type=int,
+              help="Number of agent processes")
 @click.option("-r", "--num-rounds",
               required=True,
               type=int,
               help="Number of rounds")
-@click.option("-t", "--start-time-real",
+@click.option("-t", "--start-time",
               default=0,
-              help="Start time (real time) of the simulation")
-@click.option("-p", "--period-real",
+              type=int,
+              help="Start time (realtime) of the simulation in unix timestamp")
+@click.option("-q", "--round-time",
               default=300,
-              help="Number of seconds in real time that every round represents")
+              type=int,
+              help="Number of seconds in realtime that every round represents")
+@click.option("-S", "--controller-seed",
+              default=42,
+              type=int,
+              help="Random seed for the controller")
 def controller(**kwargs):
     """
     Start a controller process.
@@ -57,116 +64,40 @@ def controller(**kwargs):
     return main_controller(**kwargs)
 
 @cli.command()
-@click.option("-e", "--event-db",
-              envvar=ENVVAR_EVENT_DB,
+@click.option("-s", "--state-dsn",
               required=True,
-              type=click.Path(exists=False),
-              help="Event database location")
-@click.option("-n", "--num-agents",
+              type=click.Path(dir_okay=False, writable=True),
+              help="System state data source name")
+@click.option("-m", "--state-store-module",
               required=True,
-              type=int,
-              help="Number of agents")
-@click.option("-m", "--num-repos",
-              required=True,
-              type=int,
-              help="Number of repos")
-@click.option("-o", "--ownership-model",
-              type=click.Choice(["independent", "balanced", "preferential"]),
-              default="balanced",
-              help="Repo ownership model")
-@click.option("-t", "--start-time-real",
-              default=0,
-              help="Start time (real time) of the simulation")
-def initdb(**kwargs):
+              type=str,
+              help="State store module")
+def initstore(**kwargs):
     """
-    Initialize event database.
+    Initialize the state store.
     """
 
-    return main_initdb(**kwargs)
+    main_initstore(**kwargs)
 
 @cli.command()
-@click.option("-a", "--address",
-              envvar=ENVVAR_ADDRESS,
+@click.option("-p", "--ctrl-port",
               required=True,
-              help="Controller address in the format [IP:PORT]")
-@click.option("-e", "--event-db",
-              envvar=ENVVAR_EVENT_DB,
+              type=int,
+              help="Controller port")
+@click.option("-s", "--state-dsn",
               required=True,
-              type=click.Path(exists=True, dir_okay=False),
-              help="Event database location")
-@click.option("-i", "--agent-id",
+              type=click.Path(exists=True, dir_okay=False, writable=True),
+              help="System state data source name")
+@click.option("-i", "--agentproc-id",
+              required=True,
               type=int,
-              help="The ID of the agent")
-@click.option("-I", "--agent-id-range",
-              nargs=2,
-              type=int,
-              help="The start and stop range of the agent IDs (endpoints are inclusive)")
-def simpleagent(**kwargs):
+              help="Agent process id")
+@click.option("--num-agents",
+              default=10,
+              help="Number of agents this process simulates")
+def dummyagent(**kwargs):
     """
-    Start a simple agent process.
-    """
-    agent_id = kwargs.pop("agent_id")
-    agent_id_range = kwargs.pop("agent_id_range")
-
-    if bool(agent_id) == bool(agent_id_range):
-        print("Specifying only one of --agent-id and --agent-id-range is required.", file=sys.stderr)
-        return 1
-
-    if agent_id:
-        kwargs["agent_id"] = agent_id
-        return main_simpleagent_single(**kwargs)
-
-    start, stop = agent_id_range
-    agent_ids = list(range(start, stop + 1))
-    kwargs["agent_ids"] = agent_ids
-    return main_simpleagent_multi(**kwargs)
-
-    # return main_simpleagent(**kwargs)
-
-@cli.command()
-@click.option("-a", "--address",
-              envvar=ENVVAR_ADDRESS,
-              required=True,
-              help="Controller address in the format [IP:PORT]")
-@click.option("-e", "--event-db",
-              envvar=ENVVAR_EVENT_DB,
-              required=True,
-              type=click.Path(exists=True, dir_okay=False),
-              help="Event database location")
-@click.option("-i", "--agent-id",
-              type=int,
-              help="The ID of the agent")
-@click.option("-I", "--agent-id-range",
-              nargs=2,
-              type=int,
-              help="The start and stop range of the agent IDs (endpoints are inclusive)")
-@click.option("-p", "--nl-prob",
-              default=0.5,
-              help="New repository lookup probability")
-@click.option("-n", "--con-thres",
-              default=2,
-              help="Repository consideration threshold")
-def thresholdagent(**kwargs):
-    """
-    Start threshold agent processes.
-
-    Note: either specify a single agent ID using --agent-id,
-    or specify multiple agent IDs using --agent-id-range.
-    Giving both or neither is an error.
+    Start a dummyagent process.
     """
 
-    agent_id = kwargs.pop("agent_id")
-    agent_id_range = kwargs.pop("agent_id_range")
-
-    if bool(agent_id) == bool(agent_id_range):
-        print("Specifying only one of --agent-id and --agent-id-range is required.", file=sys.stderr)
-        return 1
-
-    if agent_id:
-        kwargs["agent_id"] = agent_id
-        return main_thresholdagent_single(**kwargs)
-
-    start, stop = agent_id_range
-    agent_ids = list(range(start, stop + 1))
-    kwargs["agent_ids"] = agent_ids
-    return main_thresholdagent_multi(**kwargs)
+    return main_dummyagent(**kwargs)
