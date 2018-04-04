@@ -34,7 +34,10 @@ def popener():
     yield do_Popen
 
     for proc in procs:
-        proc.kill()
+        if proc.poll() is None:
+            proc.terminate()
+            if proc.poll() is None:
+                proc.kill()
 
 def test_dummy(tmpdir, random_tcp_port, popener):
     """
@@ -75,6 +78,7 @@ def test_dummy2(tmpdir, random_tcp_port, popener):
     state_dsn = str(tmpdir.join("state.db"))
     log_fname = str(tmpdir.join("log.gz"))
     port = random_tcp_port
+    num_agentprocs = 7
     rounds = 10
 
     # Initialize state store
@@ -82,23 +86,19 @@ def test_dummy2(tmpdir, random_tcp_port, popener):
     assert popener(cmd, shell=True).wait() == 0
 
     # Start controller
-    cmd = f"matrix controller -p {port} -l {log_fname} -s {state_dsn} -m matrix.dummystore -n 2 -r {rounds}"
+    cmd = f"matrix controller -p {port} -l {log_fname} -s {state_dsn} -m matrix.dummystore -n {num_agentprocs} -r {rounds}"
     controller = popener(cmd, shell=True)
 
     time.sleep(1)
 
-    # Start dummyagent processes
-    cmd = f"matrix dummyagent -p {port} -s {state_dsn} -i 1"
-    agentproc1 = popener(cmd, shell=True)
+    agentprocs = []
+    for i in range(1, num_agentprocs + 1):
+        # Start dummyagent processes
+        cmd = f"matrix dummyagent -p {port} -s {state_dsn} -i {i}"
+        agentproc = popener(cmd, shell=True)
+        agentprocs.append(agentproc)
 
-    cmd = f"matrix dummyagent -p {port} -s {state_dsn} -i 2"
-    agentproc2 = popener(cmd, shell=True)
+    for agentproc in agentprocs:
+        assert agentproc.wait() == 0
 
-    agentproc1_retcode = agentproc1.wait()
-    assert agentproc1_retcode == 0
-
-    agentproc2_retcode = agentproc2.wait()
-    assert agentproc2_retcode == 0
-
-    controller_retcode = controller.wait()
-    assert controller_retcode == 0
+    assert controller.wait() == 0
