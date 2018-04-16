@@ -50,7 +50,7 @@ def test_dummy(tmpdir, random_tcp_port, popener):
     rounds = 10
 
     # Initialize state store
-    cmd = f"matrix initstore -s '{state_dsn}' -m matrix.dummystore"
+    cmd = f"matrix dummystoreinit -s '{state_dsn}'"
     assert popener(cmd, shell=True).wait() == 0
 
     # Start controller
@@ -82,7 +82,7 @@ def test_dummy2(tmpdir, random_tcp_port, popener):
     rounds = 10
 
     # Initialize state store
-    cmd = f"matrix initstore -s '{state_dsn}' -m matrix.dummystore"
+    cmd = f"matrix dummystoreinit -s '{state_dsn}'"
     assert popener(cmd, shell=True).wait() == 0
 
     # Start controller

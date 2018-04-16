@@ -8,8 +8,8 @@ import click
 import logbook
 
 from .controller import main_controller
-from .initstore import main_initstore
 from .dummyagent import main_dummyagent
+from .dummystore import main_dummystoreinit
 
 @click.group()
 def cli():
@@ -68,16 +68,12 @@ def controller(**kwargs):
               required=True,
               type=click.Path(dir_okay=False, writable=True),
               help="System state data source name")
-@click.option("-m", "--state-store-module",
-              required=True,
-              type=str,
-              help="State store module")
-def initstore(**kwargs):
+def dummystoreinit(**kwargs):
     """
-    Initialize the state store.
+    Initialize the dummystore database.
     """
 
-    main_initstore(**kwargs)
+    main_dummystoreinit(**kwargs)
 
 @cli.command()
 @click.option("-p", "--ctrl-port",

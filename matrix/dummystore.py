@@ -87,3 +87,15 @@ class DummyStore:
 
 def get_state_store(state_dsn):
     return DummyStore(state_dsn)
+
+
+def main_dummystoreinit(**kwargs):
+    """
+    Initialize the datastore.
+    """
+
+    state_dsn = kwargs.pop("state_dsn")
+
+    store = DummyStore(state_dsn)
+    store.initialize()
+    store.close()
