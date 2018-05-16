@@ -66,7 +66,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
             self.num_waiting = 0
             self.cur_round += 1
 
-            if self.cur_round == self.num_rounds:
+            if self.cur_round == self.num_rounds + 1:
                 self.server.stop()
                 self.log_fobj.close()
                 self.state_store.close()
@@ -74,7 +74,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
             self.start_event.set()
             self.start_event.clear()
 
-        if self.cur_round == self.num_rounds:
+        if self.cur_round == self.num_rounds + 1:
             return {
                 "cur_round": -1,
                 "start_time": -1,
