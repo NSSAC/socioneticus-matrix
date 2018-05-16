@@ -18,21 +18,9 @@ class DummyStore:
         self.con = sqlite3.connect(state_dsn)
         self.event_cache = []
 
-    def initialize(self):
-        """
-        Initialize the storage.
-        """
-
-        sql = """
-        create table if not exists event (
-            agentproc_id bigint,
-            agent_id     bigint,
-            state        text,
-            cur_time     bigint,
-            round_num    bigint
-        )
-        """
-        self.con.execute(sql)
+    # NOTE: The following three methods must be implemented
+    # by any state store objects.
+    # These methods will be called by the matrix.
 
     def handle_events(self, events):
         """
@@ -61,6 +49,27 @@ class DummyStore:
         self.flush()
         self.con.close()
 
+    # The following methods are used internally
+    # by the dummystore implementation
+    # and the are not visible to the matrix.
+
+    def initialize(self):
+        """
+        Initialize the storage.
+        """
+
+        sql = """
+        create table if not exists event (
+            agentproc_id bigint,
+            agent_id     bigint,
+            state        text,
+            cur_time     bigint,
+            round_num    bigint
+        )
+        """
+        self.con.execute(sql)
+
+
     def get_prev_state(self, agentproc_id, agent_id):
         """
         Get the last known state of the agent.
@@ -85,9 +94,11 @@ class DummyStore:
             return None
         return row[0]
 
+# NOTE: Implementing this factory function
+# is mandatory as this is how the matrix
+# creates the state store object.
 def get_state_store(state_dsn):
     return DummyStore(state_dsn)
-
 
 def main_dummystoreinit(**kwargs):
     """
