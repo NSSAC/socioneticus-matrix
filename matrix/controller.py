@@ -1,7 +1,9 @@
 """
 Matrix: Controller
 """
+# pylint: disable=broad-except
 
+import sys
 import json
 import gzip
 import random
@@ -12,7 +14,7 @@ from gevent.event import Event
 from gevent.server import StreamServer
 from jsonrpc import JSONRPCResponseManager, Dispatcher
 
-_log = logbook.Logger(__name__)
+log = logbook.Logger(__name__)
 
 class Controller: # pylint: disable=too-many-instance-attributes
     """
@@ -57,19 +59,29 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
         self.num_waiting += 1
         if self.num_waiting < self.num_agentprocs:
-            _log.info(f"{self.num_waiting}/{self.num_agentprocs} agent processes are waiting.")
+            log.info(f"{self.num_waiting}/{self.num_agentprocs} agent processes are waiting.")
             self.start_event.wait()
         else:
-            _log.info(f"{self.num_waiting}/{self.num_agentprocs} agent processes are ready.")
+            log.info(f"{self.num_waiting}/{self.num_agentprocs} agent processes are ready.")
 
-            self.state_store.flush()
+            try:
+                self.state_store.flush()
+            except Exception:
+                log.exception("StateStoreError: Error flushing events")
+                sys.exit(1)
+
             self.num_waiting = 0
             self.cur_round += 1
 
             if self.cur_round == self.num_rounds + 1:
                 self.server.stop()
                 self.log_fobj.close()
-                self.state_store.close()
+
+                try:
+                    self.state_store.close()
+                except Exception:
+                    log.exception("StateStoreError: Error closing event database")
+                    sys.exit(1)
 
             self.start_event.set()
             self.start_event.clear()
@@ -96,7 +108,13 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
         for event in events:
             self.log_fobj.write(json.dumps(event) + "\n")
-        self.state_store.handle_events(events)
+
+        try:
+            self.state_store.handle_events(events)
+        except Exception:
+            log.exception("StateStoreError: error handling events.")
+            sys.exit(1)
+
         return True
 
     def get_agentproc_seed(self, agentproc_id):
@@ -114,7 +132,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
         """
 
         address_str = ":".join(map(str, address))
-        _log.info(f"New connection from {address_str}")
+        log.info(f"New connection from {address_str}")
 
         # We are expecting json only
         # So encoding ascii shoud be sufficient
@@ -126,7 +144,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
                 sock.sendall(response)
 
-            _log.info(f"{address_str} disconnected")
+            log.info(f"{address_str} disconnected")
 
 def main_controller(**kwargs):
     """
@@ -140,11 +158,20 @@ def main_controller(**kwargs):
     state_dsn = kwargs.pop("state_dsn")
 
     address = ("127.0.0.1", port)
-    state_store_module = importlib.import_module(state_store_module)
-    state_store = state_store_module.get_state_store(state_dsn)
+    try:
+        state_store_module = importlib.import_module(state_store_module)
+    except ImportError as e:
+        log.error(f"Failed to import state store module '{state_store_module}'\n{e}")
+        sys.exit(1)
+
+    try:
+        state_store = state_store_module.get_state_store(state_dsn)
+    except Exception: # pylint: disable=broad-except
+        log.exception("StateStoreError: Error obtaining state store object")
+        sys.exit(1)
 
     address_str = ":".join(map(str, address))
-    _log.notice(f"Starting controller on: {address_str}")
+    log.notice(f"Starting controller on: {address_str}")
 
     controller = Controller(kwargs, state_store)
     server = StreamServer(address, controller.serve)
