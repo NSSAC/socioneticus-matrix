@@ -74,7 +74,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
             self.start_event.set()
             self.start_event.clear()
 
-        if self.cur_round == self.num_rounds + 1:
+        if self.cur_round == self.num_rounds:
             return {
                 "cur_round": -1,
                 "start_time": -1,
