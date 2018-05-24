@@ -7,21 +7,77 @@ import sys
 import json
 import gzip
 import random
+import asyncio
 import importlib
 
 import logbook
-from gevent.event import Event
-from gevent.server import StreamServer
-from jsonrpc import JSONRPCResponseManager, Dispatcher
 
 log = logbook.Logger(__name__)
+
+def rpc_parse(line):
+    """
+    Parse a jsonrpc request and check correctness.
+    """
+
+    try:
+        request = json.loads(line)
+        assert isinstance(request, dict)
+    except (ValueError, AssertionError):
+        return None, "Malformatted RPC request"
+
+    try:
+        assert request["jsonrpc"] == "2.0"
+    except (KeyError, AssertionError):
+        return request, "Incompatible RPC version: jsonrpc != 2.0"
+
+    try:
+        assert isinstance(request["method"], str)
+    except (KeyError, AssertionError):
+        return request, "Method name is not a string"
+
+    if "params" in request:
+        if not isinstance(request["params"], (list, dict)):
+            return request, "Parameters can only be of type object or array"
+
+    return request, None
+
+def rpc_error(message, request=None):
+    """
+    Generate the rpc error message.
+    """
+
+    response = {
+        "jsonrpc": "2.0",
+        "error": str(message)
+    }
+
+    if request is not None and "id" in request:
+        response["id"] = request["id"]
+
+    return json.dumps(response)
+
+def rpc_response(result, request):
+    """
+    Generate the response message.
+    """
+
+    if "id" not in request:
+        return None
+
+    response = {
+        "jsonrpc": "2.0",
+        "result": result,
+        "id": request["id"]
+    }
+
+    return json.dumps(response)
 
 class Controller: # pylint: disable=too-many-instance-attributes
     """
     Controller object.
     """
 
-    def __init__(self, config, state_store):
+    def __init__(self, config, state_store, loop):
         self.num_agentprocs = config["num_agentprocs"]
         self.num_rounds = config["num_rounds"]
         self.start_time = config["start_time"]
@@ -30,29 +86,18 @@ class Controller: # pylint: disable=too-many-instance-attributes
         self.controller_seed = config["controller_seed"]
 
         self.state_store = state_store
+        self.loop = loop
 
         random.seed(self.controller_seed, version=2)
         self.agentproc_seeds = [random.randint(0, 2 ** 32 -1) for _ in range(self.num_agentprocs)]
-
-        # NOTE: This is a hack
-        # The server needs the controller, and controller needs server.
-        # Thus after creation of both, the server attribute needs to be set
-        # from the outside.
-        self.server = None
 
         self.log_fobj = gzip.open(self.log_fname, "at", encoding="utf-8", compresslevel=6)
 
         self.cur_round = 0
         self.num_waiting = 0
-        self.start_event = Event()
+        self.start_event = asyncio.Event()
 
-        self.dispatcher = Dispatcher({
-            "can_we_start_yet": self.can_we_start_yet,
-            "register_events": self.register_events,
-            "get_agentproc_seed": self.get_agentproc_seed
-        })
-
-    def can_we_start_yet(self):
+    async def can_we_start_yet(self):
         """
         RPC method, returns when agent process to allowed to begin executing current round.
         """
@@ -60,7 +105,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
         self.num_waiting += 1
         if self.num_waiting < self.num_agentprocs:
             log.info(f"{self.num_waiting}/{self.num_agentprocs} agent processes are waiting.")
-            self.start_event.wait()
+            await self.start_event.wait()
         else:
             log.info(f"{self.num_waiting}/{self.num_agentprocs} agent processes are ready.")
 
@@ -74,7 +119,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
             self.cur_round += 1
 
             if self.cur_round == self.num_rounds + 1:
-                self.server.stop()
+                self.loop.stop()
                 self.log_fobj.close()
 
                 try:
@@ -84,6 +129,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
                     sys.exit(1)
 
             self.start_event.set()
+            await asyncio.sleep(0)
             self.start_event.clear()
 
         if self.cur_round == self.num_rounds + 1:
@@ -126,25 +172,75 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
         return self.agentproc_seeds[agentproc_id -1]
 
-    def serve(self, sock, address):
+    async def rpc_dispatch(self, line):
         """
-        Serve this new connection.
+        Dispatch the proper method.
         """
 
+        method_map = {
+            "register_events": self.register_events,
+            "get_agentproc_seed": self.get_agentproc_seed
+        }
+
+        async_method_map = {
+            "can_we_start_yet": self.can_we_start_yet,
+        }
+
+        request, error = rpc_parse(line)
+        if error is not None:
+            return rpc_error(error, request)
+
+        method = request["method"]
+        if method not in method_map and method not in async_method_map:
+            return rpc_error("Unknown RPC method", request)
+
+        if "params" in request:
+            params = request["params"]
+            if isinstance(params, list):
+                args, kwargs = params, {}
+            else: # isinstance(params, dict)
+                args, kwargs = [], params
+
+        if method in method_map:
+            try:
+                response = method_map[method](*args, **kwargs)
+            except Exception as e:
+                return rpc_error(e, request)
+        else: # method in async_method_map:
+            try:
+                response = await async_method_map[method](*args, **kwargs)
+            except Exception as e:
+                return rpc_error(e, request)
+
+        return rpc_response(response, request)
+
+    async def handle_agent_process(self, reader, writer):
+        """
+        Serve this new agent process.
+        """
+
+        address = writer.get_extra_info('peername')
         address_str = ":".join(map(str, address))
         log.info(f"New connection from {address_str}")
 
         # We are expecting json only
         # So encoding ascii shoud be sufficient
-        with sock.makefile(mode='r', encoding='ascii') as fobj:
-            for line in fobj:
-                response = JSONRPCResponseManager.handle(line, self.dispatcher)
-                response = response.json + "\n" # The newline important
-                response = response.encode("ascii")
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            line = line.decode("ascii")
 
-                sock.sendall(response)
+            response = await self.rpc_dispatch(line)
+            if response is None:
+                continue
 
-            log.info(f"{address_str} disconnected")
+            response = response + "\n" # The newline important
+            response = response.encode("ascii")
+            writer.write(response)
+            await writer.drain()
+
+        log.info(f"{address_str} disconnected")
 
 def main_controller(**kwargs):
     """
@@ -173,8 +269,16 @@ def main_controller(**kwargs):
     address_str = ":".join(map(str, address))
     log.notice(f"Starting controller on: {address_str}")
 
-    controller = Controller(kwargs, state_store)
-    server = StreamServer(address, controller.serve)
-    controller.server = server
+    loop = asyncio.get_event_loop()
+    controller = Controller(kwargs, state_store, loop)
+    srv_coro = asyncio.start_server(controller.handle_agent_process, *address, loop=loop)
+    server = loop.run_until_complete(srv_coro)
 
-    server.serve_forever()
+    loop.run_forever()
+
+    server.close()
+    loop.run_until_complete(server.wait_closed())
+
+    pending = asyncio.Task.all_tasks()
+    loop.run_until_complete(asyncio.gather(*pending))
+    loop.close()

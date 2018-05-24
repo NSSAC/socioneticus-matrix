@@ -2,15 +2,13 @@ from setuptools import setup
 
 setup(
     name="Matrix",
-    version="0.0.6",
+    version="0.0.7",
 
     packages=["matrix"],
 
     install_requires=[
         "Click",
         "logbook",
-        "gevent",
-        "json-rpc"
     ],
 
     entry_points="""
