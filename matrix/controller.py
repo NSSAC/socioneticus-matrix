@@ -168,6 +168,27 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
         log.info(f"{address_str} disconnected")
 
+async def do_startup(config, hostname, state_store, loop):
+    """
+    Start the matrix controller.
+    """
+
+    port = config.controller_port
+
+    controller = Controller(config, hostname, state_store, loop)
+
+    server = await asyncio.start_server(controller.handle_agent_process, "127.0.0.1", port)
+
+    return server
+
+async def do_cleanup(server):
+    """
+    Cleanup the running processes.
+    """
+
+    server.close()
+    await server.wait_closed()
+
 def main_controller(config, hostname):
     """
     Controller process starting point.
@@ -175,11 +196,9 @@ def main_controller(config, hostname):
 
     logbook.StderrHandler().push_application()
 
-    port = config.controller_port
     state_store_module = config.state_store_module
     state_dsn = config.state_dsn
 
-    address = ("127.0.0.1", port)
     try:
         state_store_module = importlib.import_module(state_store_module)
     except ImportError as e:
@@ -192,18 +211,11 @@ def main_controller(config, hostname):
         log.exception("StateStoreError: Error obtaining state store object")
         sys.exit(1)
 
-    address_str = ":".join(map(str, address))
-    log.notice(f"Starting controller on: {address_str}")
-
     loop = asyncio.get_event_loop()
-    controller = Controller(config, hostname, state_store, loop)
-    srv_coro = asyncio.start_server(controller.handle_agent_process, *address, loop=loop)
-    server = loop.run_until_complete(srv_coro)
 
+    server = loop.run_until_complete(do_startup(config, hostname, state_store, loop))
     loop.run_forever()
-
-    server.close()
-    loop.run_until_complete(server.wait_closed())
+    loop.run_until_complete(do_cleanup(server))
 
     pending = asyncio.Task.all_tasks()
     loop.run_until_complete(asyncio.gather(*pending))
