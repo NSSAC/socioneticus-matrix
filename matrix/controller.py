@@ -4,98 +4,79 @@ Matrix: Controller
 # pylint: disable=broad-except
 
 import sys
-import json
-import gzip
 import random
 import asyncio
 import importlib
 
 import logbook
 
+from matrix.json_rpc import rpc_dispatch
+
 log = logbook.Logger(__name__)
 
-def rpc_parse(line):
+def randint():
+    return random.randint(0, 2 ** 32 - 1)
+
+class StateStoreWrapper:
     """
-    Parse a jsonrpc request and check correctness.
-    """
+    Wrapper for state store module.
 
-    try:
-        request = json.loads(line)
-        assert isinstance(request, dict)
-    except (ValueError, AssertionError):
-        return None, "Malformatted RPC request"
-
-    try:
-        assert request["jsonrpc"] == "2.0"
-    except (KeyError, AssertionError):
-        return request, "Incompatible RPC version: jsonrpc != 2.0"
-
-    try:
-        assert isinstance(request["method"], str)
-    except (KeyError, AssertionError):
-        return request, "Method name is not a string"
-
-    if "params" in request:
-        if not isinstance(request["params"], (list, dict)):
-            return request, "Parameters can only be of type object or array"
-
-    return request, None
-
-def rpc_error(message, request=None):
-    """
-    Generate the rpc error message.
+    On any exception from the state store module, log and exit.
     """
 
-    response = {
-        "jsonrpc": "2.0",
-        "error": str(message)
-    }
+    def __init__(self, store):
+        self.store = store
 
-    if request is not None and "id" in request:
-        response["id"] = request["id"]
+    def handle_events(self, events):
+        try:
+            self.store.handle_events(events)
+        except Exception:
+            log.exception("StateStoreError: error handling events.")
+            sys.exit(1)
 
-    return json.dumps(response)
+    def flush(self):
+        try:
+            self.store.flush()
+        except Exception:
+            log.exception("StateStoreError: Error flushing events")
+            sys.exit(1)
 
-def rpc_response(result, request):
-    """
-    Generate the response message.
-    """
-
-    if "id" not in request:
-        return None
-
-    response = {
-        "jsonrpc": "2.0",
-        "result": result,
-        "id": request["id"]
-    }
-
-    return json.dumps(response)
+    def close(self):
+        try:
+            self.store.close()
+        except Exception:
+            log.exception("StateStoreError: Error closing event database")
+            sys.exit(1)
 
 class Controller: # pylint: disable=too-many-instance-attributes
     """
     Controller object.
     """
 
-    def __init__(self, config, state_store, loop):
-        self.num_agentprocs = config["num_agentprocs"]
-        self.num_rounds = config["num_rounds"]
-        self.start_time = config["start_time"]
-        self.round_time = config["round_time"]
-        self.log_fname = config["log_fname"]
-        self.controller_seed = config["controller_seed"]
+    def __init__(self, config, hostname, state_store, loop):
+        self.num_controllers = len(config.sim_nodes)
+        self.num_agentprocs = config.num_agentprocs[hostname]
+        self.num_rounds = config.num_rounds
+        self.start_time = config.start_time
+        self.round_time = config.round_time
 
-        self.state_store = state_store
-        self.loop = loop
+        random.seed(config.root_seed, version=2)
+        controller_seeds = [randint() for _ in config.sim_nodes]
+        controller_index = config.sim_nodes.index(hostname)
+        self.controller_seed = controller_seeds[controller_index]
 
         random.seed(self.controller_seed, version=2)
-        self.agentproc_seeds = [random.randint(0, 2 ** 32 -1) for _ in range(self.num_agentprocs)]
+        self.agentproc_seeds = [randint() for _ in range(self.num_agentprocs)]
 
-        self.log_fobj = gzip.open(self.log_fname, "at", encoding="utf-8", compresslevel=6)
+        self.state_store = StateStoreWrapper(state_store)
+        self.loop = loop
 
         self.cur_round = 0
         self.num_waiting = 0
         self.start_event = asyncio.Event()
+
+    def is_sim_end(self):
+        return self.cur_round == self.num_rounds + 1
 
     async def can_we_start_yet(self):
         """
@@ -109,35 +90,20 @@ class Controller: # pylint: disable=too-many-instance-attributes
         else:
             log.info(f"{self.num_waiting}/{self.num_agentprocs} agent processes are ready.")
 
-            try:
-                self.state_store.flush()
-            except Exception:
-                log.exception("StateStoreError: Error flushing events")
-                sys.exit(1)
-
+            self.state_store.flush()
             self.num_waiting = 0
             self.cur_round += 1
 
-            if self.cur_round == self.num_rounds + 1:
+            if self.is_sim_end():
                 self.loop.stop()
-                self.log_fobj.close()
-
-                try:
-                    self.state_store.close()
-                except Exception:
-                    log.exception("StateStoreError: Error closing event database")
-                    sys.exit(1)
+                self.state_store.close()
 
             self.start_event.set()
             await asyncio.sleep(0)
             self.start_event.clear()
 
-        if self.cur_round == self.num_rounds + 1:
-            return {
-                "cur_round": -1,
-                "start_time": -1,
-                "end_time": -1
-            }
+        if self.is_sim_end():
+            return { "cur_round": -1, "start_time": -1, "end_time": -1 }
 
         return {
             "cur_round": self.cur_round,
@@ -152,15 +118,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
         events: list of events.
         """
 
-        for event in events:
-            self.log_fobj.write(json.dumps(event) + "\n")
-
-        try:
-            self.state_store.handle_events(events)
-        except Exception:
-            log.exception("StateStoreError: error handling events.")
-            sys.exit(1)
-
+        self.state_store.handle_events(events)
         return True
 
     def get_agentproc_seed(self, agentproc_id):
@@ -172,9 +130,10 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
         return self.agentproc_seeds[agentproc_id -1]
 
-    async def rpc_dispatch(self, line):
+
+    async def handle_agent_process(self, reader, writer):
         """
-        Dispatch the proper method.
+        Serve this new agent process.
         """
 
         method_map = {
@@ -185,39 +144,6 @@ class Controller: # pylint: disable=too-many-instance-attributes
         async_method_map = {
             "can_we_start_yet": self.can_we_start_yet,
         }
-
-        request, error = rpc_parse(line)
-        if error is not None:
-            return rpc_error(error, request)
-
-        method = request["method"]
-        if method not in method_map and method not in async_method_map:
-            return rpc_error("Unknown RPC method", request)
-
-        if "params" in request:
-            params = request["params"]
-            if isinstance(params, list):
-                args, kwargs = params, {}
-            else: # isinstance(params, dict)
-                args, kwargs = [], params
-
-        if method in method_map:
-            try:
-                response = method_map[method](*args, **kwargs)
-            except Exception as e:
-                return rpc_error(e, request)
-        else: # method in async_method_map:
-            try:
-                response = await async_method_map[method](*args, **kwargs)
-            except Exception as e:
-                return rpc_error(e, request)
-
-        return rpc_response(response, request)
-
-    async def handle_agent_process(self, reader, writer):
-        """
-        Serve this new agent process.
-        """
 
         address = writer.get_extra_info('peername')
         address_str = ":".join(map(str, address))
@@ -231,7 +157,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
                 break
             line = line.decode("ascii")
 
-            response = await self.rpc_dispatch(line)
+            response = await rpc_dispatch(method_map, async_method_map, line)
             if response is None:
                 continue
 
@@ -242,16 +168,16 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
         log.info(f"{address_str} disconnected")
 
-def main_controller(**kwargs):
+def main_controller(config, hostname):
     """
     Controller process starting point.
     """
 
     logbook.StderrHandler().push_application()
 
-    port = kwargs.pop("ctrl_port")
-    state_store_module = kwargs.pop("state_store_module")
-    state_dsn = kwargs.pop("state_dsn")
+    port = config.controller_port
+    state_store_module = config.state_store_module
+    state_dsn = config.state_dsn
 
     address = ("127.0.0.1", port)
     try:
@@ -270,7 +196,7 @@ def main_controller(**kwargs):
     log.notice(f"Starting controller on: {address_str}")
 
     loop = asyncio.get_event_loop()
-    controller = Controller(kwargs, state_store, loop)
+    controller = Controller(config, hostname, state_store, loop)
     srv_coro = asyncio.start_server(controller.handle_agent_process, *address, loop=loop)
     server = loop.run_until_complete(srv_coro)
 

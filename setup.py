@@ -9,6 +9,8 @@ setup(
     install_requires=[
         "Click",
         "logbook",
+        "attrdict",
+        "pyyaml"
     ],
 
     entry_points="""

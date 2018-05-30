@@ -2,14 +2,50 @@
 Matrix: CLI Interface
 """
 
+import os
 import sys
+from datetime import datetime, date
+from calendar import timegm
 
+import yaml
 import click
 import logbook
+from attrdict import AttrDict
 
 from .controller import main_controller
 from .dummyagent import main_dummyagent
 from .dummystore import main_dummystoreinit
+
+def parse_timestamp(dt):
+    """
+    Parse timestamp from date.
+    """
+
+    if not isinstance(dt, date):
+        print(f"Invalid date '{dt}'")
+        sys.exit(1)
+
+    ts = datetime(dt.year, dt.month, dt.day)
+    ts = ts.utctimetuple()
+    ts = timegm(ts)
+    return ts
+
+INTERVAL_SUFFIXES = { "s": 1, "m": 60, "h": 3600, "d": 86400 }
+def parse_interval(text):
+    """
+    Parse interval from text.
+    """
+
+    parts = text.split()
+    interval = 0
+    for part in parts:
+        x, suffix = part[:-1], part[-1]
+        try:
+            interval += int(x) * INTERVAL_SUFFIXES[suffix]
+        except (ValueError, KeyError):
+            print(f"Invalid interval '{text}'")
+            sys.exit(1)
+    return interval
 
 @click.group()
 def cli():
@@ -20,48 +56,32 @@ def cli():
     pass
 
 @cli.command()
-@click.option("-p", "--ctrl-port",
+@click.option("-c", "--config",
               required=True,
-              type=int,
-              help="Controller port")
-@click.option("-l", "--log-fname",
-              required=True,
-              type=click.Path(dir_okay=False, writable=True),
-              help="Event log file location")
-@click.option("-s", "--state-dsn",
-              required=True,
-              type=click.Path(exists=True, dir_okay=False, writable=True),
-              help="System state data source name")
-@click.option("-m", "--state-store-module",
+              type=click.Path(exists=True, dir_okay=False),
+              help="Controller configuration file")
+@click.option("-h", "--hostname",
               required=True,
               type=str,
-              help="State store module")
-@click.option("-n", "--num-agentprocs",
-              required=True,
-              type=int,
-              help="Number of agent processes")
-@click.option("-r", "--num-rounds",
-              required=True,
-              type=int,
-              help="Number of rounds")
-@click.option("-t", "--start-time",
-              default=0,
-              type=int,
-              help="Start time (realtime) of the simulation in unix timestamp")
-@click.option("-q", "--round-time",
-              default=300,
-              type=int,
-              help="Number of seconds in realtime that every round represents")
-@click.option("-S", "--controller-seed",
-              default=42,
-              type=int,
-              help="Random seed for the controller")
-def controller(**kwargs):
+              help="Controller hostname")
+def controller(config, hostname):
     """
     Start a controller process.
     """
 
-    return main_controller(**kwargs)
+    with open(config) as fobj:
+        cfg = yaml.load(fobj)
+    cfg = AttrDict(cfg)
+
+    if hostname not in cfg.sim_nodes:
+        print(f"Hostname not in configured node list")
+        sys.exit(1)
+
+    cfg.state_dsn = os.path.expandvars(cfg.state_dsn)
+    cfg.start_time = parse_timestamp(cfg.start_time)
+    cfg.round_time = parse_interval(cfg.round_time)
+
+    return main_controller(cfg, hostname)
 
 @cli.command()
 @click.option("-s", "--state-dsn",
