@@ -15,6 +15,7 @@ from attrdict import AttrDict
 from .controller import main_controller
 from .dummyagent import main_dummyagent
 from .dummystore import main_dummystoreinit
+from .run_rabbitmq import main_run_rabbitmq
 
 def parse_timestamp(dt):
     """
@@ -117,3 +118,23 @@ def dummyagent(**kwargs):
     """
 
     return main_dummyagent(**kwargs)
+
+@cli.command("run-rabbitmq")
+@click.option("-c", "--config",
+              required=True,
+              type=click.Path(exists=True, dir_okay=False),
+              help="Rabbitmq configuration file")
+@click.option("-r", "--runtime-dir",
+              required=True,
+              type=click.Path(exists=True, file_okay=False, dir_okay=True),
+              help="Rabbitmq runtime directory")
+@click.option("-h", "--hostname",
+              required=True,
+              type=str,
+              help="Hostname for rabbitmq to bind to")
+def run_rabbitmq(config, runtime_dir, hostname):
+    """
+    Start the rabbitmq server.
+    """
+
+    main_run_rabbitmq(config, runtime_dir, hostname)
