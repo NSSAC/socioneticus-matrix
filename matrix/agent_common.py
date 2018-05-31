@@ -18,8 +18,8 @@ class RPCProxy: # pylint: disable=too-few-public-methods
     RPC Proxy class for calling controller functions.
     """
 
-    def __init__(self, port):
-        address = ("127.0.0.1", port)
+    def __init__(self, host, port):
+        address = (host, port)
 
         address_str = ":".join(map(str, address))
         _log.notice(f"Connecting to controller at: {address_str}")

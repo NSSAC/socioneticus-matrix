@@ -97,6 +97,10 @@ def dummystoreinit(**kwargs):
     main_dummystoreinit(**kwargs)
 
 @cli.command()
+@click.option("-h", "--ctrl-host",
+              required=True,
+              type=str,
+              help="Controller host")
 @click.option("-p", "--ctrl-port",
               required=True,
               type=int,

@@ -39,7 +39,7 @@ class DummyStore:
 
         with self.con:
             cur = self.con.cursor()
-            sql = "insert into event values (?,?,?,?,?)"
+            sql = "insert into event values (?,?,?,?)"
             for event in self.event_cache:
                 cur.execute(sql, event)
 
@@ -60,8 +60,7 @@ class DummyStore:
 
         sql = """
         create table if not exists event (
-            agentproc_id bigint,
-            agent_id     bigint,
+            agent_id     text,
             state        text,
             cur_time     bigint,
             round_num    bigint
@@ -70,7 +69,7 @@ class DummyStore:
         self.con.execute(sql)
 
 
-    def get_prev_state(self, agentproc_id, agent_id):
+    def get_prev_state(self, agent_id):
         """
         Get the last known state of the agent.
 
@@ -82,13 +81,12 @@ class DummyStore:
             select state
             from event
             where
-                agentproc_id = ?
-                and agent_id = ?
+                agent_id = ?
             order by round_num desc
             limit 1
         """
         cur = self.con.cursor()
-        cur.execute(sql, (agentproc_id, agent_id))
+        cur.execute(sql, (agent_id,))
         row = cur.fetchone()
         if not row:
             return None
