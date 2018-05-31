@@ -88,8 +88,8 @@ def main_run_rabbitmq(config_fname, runtime_dir, hostname):
 
     logbook.StderrHandler().push_application()
 
-    config_fname = Path(config_fname)
-    runtime_dir = Path(runtime_dir)
+    config_fname = Path(config_fname).absolute()
+    runtime_dir = Path(runtime_dir).absolute()
 
     config_fname = config_fname.parent / config_fname.stem
     mnesia_base = runtime_dir / "mnesia"
