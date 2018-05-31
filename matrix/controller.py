@@ -142,7 +142,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
         Send message to other controllers that all our agents have finished.
         """
 
-        message = json.dumps(None)
+        message = json.dumps(None).encode("utf-8")
         await self.snd_chan.basic_publish(message,
                                           exchange_name=self.event_exchange,
                                           routing_key=self.hostname)
@@ -169,7 +169,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
         events: list of events.
         """
 
-        message = json.dumps(events)
+        message = json.dumps(events).encode("utf-8")
         await self.snd_chan.basic_publish(message,
                                           exchange_name=self.event_exchange,
                                           routing_key=self.hostname)
@@ -192,7 +192,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
         message: the message body from the broker.
         """
 
-        events = json.loads(body)
+        events = json.loads(body.decode("utf-8"))
         if events is None:
             await self.controller_process_finished()
         else:
