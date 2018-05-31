@@ -5,6 +5,10 @@ Methods to implement jsonrpc over asyncio.
 
 import json
 
+import logbook
+
+log = logbook.Logger(__name__)
+
 def rpc_parse(line):
     """
     Parse a jsonrpc request and check correctness.
@@ -89,11 +93,13 @@ async def rpc_dispatch(method_map, async_method_map, line):
         try:
             response = method_map[method](*args, **kwargs)
         except Exception as e:
+            log.exception(f"Error dispatching {method}")
             return rpc_error(e, request)
     else: # method in async_method_map:
         try:
             response = await async_method_map[method](*args, **kwargs)
         except Exception as e:
+            log.exception(f"Error dispatching {method}")
             return rpc_error(e, request)
 
     return rpc_response(response, request)

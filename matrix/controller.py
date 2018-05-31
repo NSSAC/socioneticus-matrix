@@ -4,11 +4,13 @@ Matrix: Controller
 # pylint: disable=broad-except
 
 import sys
+import json
 import random
 import asyncio
 import importlib
 
 import logbook
+import aioamqp
 
 from matrix.json_rpc import rpc_dispatch
 
@@ -53,54 +55,103 @@ class Controller: # pylint: disable=too-many-instance-attributes
     Controller object.
     """
 
-    def __init__(self, config, hostname, state_store, loop):
+    def __init__(self, config, hostname, state_store, snd_chan, loop):
         self.num_controllers = len(config.sim_nodes)
         self.num_agentprocs = config.num_agentprocs[hostname]
         self.num_rounds = config.num_rounds
         self.start_time = config.start_time
         self.round_time = config.round_time
 
+        # Generate the seed for the current controller
         random.seed(config.root_seed, version=2)
         controller_seeds = [randint() for _ in config.sim_nodes]
         controller_index = config.sim_nodes.index(hostname)
         self.controller_seed = controller_seeds[controller_index]
 
+        # Generate seeds for agent processes
         random.seed(self.controller_seed, version=2)
         self.agentproc_seeds = [randint() for _ in range(self.num_agentprocs)]
 
         self.state_store = StateStoreWrapper(state_store)
+
+        # Info needed to send messages to the broker
+        self.snd_chan = snd_chan
+        self.event_exchange = config.event_exchange
+        self.hostname = hostname
+
+        # The event loop
         self.loop = loop
 
+        # The following four attributes
+        # are the only mutable part of the class.
         self.cur_round = 0
-        self.num_waiting = 0
+        self.num_ap_waiting = 0
+        self.num_cp_finished = 0
         self.start_event = asyncio.Event()
 
     def is_sim_end(self):
+        """
+        Has the simulation ended.
+        """
+
         return self.cur_round == self.num_rounds + 1
 
+    async def agent_process_waiting(self):
+        """
+        Update state when a agent process is waiting.
+        """
+
+        self.num_ap_waiting += 1
+        log.info(f"{self.num_ap_waiting}/{self.num_agentprocs} agent processes are waiting ...")
+        if self.num_ap_waiting == self.num_agentprocs:
+            await self.send_controller_finished()
+        await self.start_event.wait()
+
+    async def controller_process_finished(self):
+        """
+        Update state when a controller reports that all its agents have finished.
+        """
+
+        self.num_cp_finished += 1
+        log.info(f"{self.num_cp_finished}/{self.num_controllers} controllers are waiting ...")
+
+        if self.num_cp_finished != self.num_controllers:
+            return
+
+        # Flush the store
+        # and reset the state
+        self.state_store.flush()
+        self.cur_round += 1
+        self.num_ap_waiting = 0
+        self.num_cp_finished = 0
+
+        # Wake up all agent processes
+        self.start_event.set()
+        await asyncio.sleep(0)
+        self.start_event.clear()
+
+        # If simulation has ended
+        # stop the event loop
+        # and flush the state store
+        if self.is_sim_end():
+            self.state_store.close()
+            self.loop.stop()
+
+    async def send_controller_finished(self):
+        """
+        Send message to other controllers that all our agents have finished.
+        """
+
+        message = json.dumps(None)
+        await self.snd_chan.basic_publish(message,
+                                          exchange_name=self.event_exchange,
+                                          routing_key=self.hostname)
     async def can_we_start_yet(self):
         """
         RPC method, returns when agent process to allowed to begin executing current round.
         """
 
-        self.num_waiting += 1
-        if self.num_waiting < self.num_agentprocs:
-            log.info(f"{self.num_waiting}/{self.num_agentprocs} agent processes are waiting.")
-            await self.start_event.wait()
-        else:
-            log.info(f"{self.num_waiting}/{self.num_agentprocs} agent processes are ready.")
-
-            self.state_store.flush()
-            self.num_waiting = 0
-            self.cur_round += 1
-
-            if self.is_sim_end():
-                self.loop.stop()
-                self.state_store.close()
-
-            self.start_event.set()
-            await asyncio.sleep(0)
-            self.start_event.clear()
+        await self.agent_process_waiting()
 
         if self.is_sim_end():
             return { "cur_round": -1, "start_time": -1, "end_time": -1 }
@@ -111,15 +162,19 @@ class Controller: # pylint: disable=too-many-instance-attributes
             "end_time": int(self.start_time + self.round_time * self.cur_round)
         }
 
-    def register_events(self, events):
+    async def register_events(self, events):
         """
         RPC method, used by agent processes to hand over generated events to the system.
 
         events: list of events.
         """
 
-        self.state_store.handle_events(events)
+        message = json.dumps(events)
+        await self.snd_chan.basic_publish(message,
+                                          exchange_name=self.event_exchange,
+                                          routing_key=self.hostname)
         return True
+
 
     def get_agentproc_seed(self, agentproc_id):
         """
@@ -130,27 +185,43 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
         return self.agentproc_seeds[agentproc_id -1]
 
+    async def handle_broker_message(self, channel, body, envelope, _properties):
+        """
+        Callback handler, for messages from amqp broker.
+
+        message: the message body from the broker.
+        """
+
+        events = json.loads(body)
+        if events is None:
+            await self.controller_process_finished()
+        else:
+            self.state_store.handle_events(events)
+
+        # Send acknolegement back to server
+        await channel.basic_client_ack(delivery_tag=envelope.delivery_tag)
 
     async def handle_agent_process(self, reader, writer):
         """
-        Serve this new agent process.
+        Callback handler, for new tcp connections from agents.
+
+        reader: async stream reader object
+        writer: async stream writer object
         """
 
         method_map = {
-            "register_events": self.register_events,
             "get_agentproc_seed": self.get_agentproc_seed
         }
 
         async_method_map = {
-            "can_we_start_yet": self.can_we_start_yet,
+            "register_events": self.register_events,
+            "can_we_start_yet": self.can_we_start_yet
         }
 
         address = writer.get_extra_info('peername')
         address_str = ":".join(map(str, address))
         log.info(f"New connection from {address_str}")
 
-        # We are expecting json only
-        # So encoding ascii shoud be sufficient
         while True:
             line = await reader.readline()
             if not line:
@@ -168,6 +239,34 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
         log.info(f"{address_str} disconnected")
 
+async def make_amqp_channel(config):
+    """
+    Create an async amqp channel.
+    """
+
+    transport, protocol = await aioamqp.connect(
+        host=config.rabbitmq_host,
+        port=config.rabbitmq_port,
+        login=config.rabbitmq_username,
+        password=config.rabbitmq_password)
+    channel = await protocol.channel()
+    return transport, protocol, channel
+
+async def make_receiver_queue(callback, channel, config, hostname):
+    """
+    Make the receiver queue and bind to topics.
+    """
+
+    queue = await channel.queue_declare("", exclusive=True)
+    queue_name = queue["queue"]
+
+    await channel.queue_bind(exchange_name=config.event_exchange,
+                             queue_name=queue_name,
+                             routing_key=hostname)
+
+    await channel.basic_consume(callback, queue_name=queue_name)
+    return queue
+
 async def do_startup(config, hostname, state_store, loop):
     """
     Start the matrix controller.
@@ -175,19 +274,39 @@ async def do_startup(config, hostname, state_store, loop):
 
     port = config.controller_port
 
-    controller = Controller(config, hostname, state_store, loop)
+    log.info("Creating AMQP send channel ...")
+    snd_trans, snd_proto, snd_chan = await make_amqp_channel(config)
 
-    server = await asyncio.start_server(controller.handle_agent_process, "127.0.0.1", port)
+    log.info("Creating AMQP receive channel ...")
+    rcv_trans, rcv_proto, rcv_chan = await make_amqp_channel(config)
 
-    return server
+    log.info("Setting up event exchange ...")
+    await snd_chan.exchange_declare(exchange_name=config.event_exchange, type_name='fanout')
 
-async def do_cleanup(server):
+    controller = Controller(config, hostname, state_store, snd_chan, loop)
+
+    log.info("Setting up AMQP receiver ...")
+    await make_receiver_queue(controller.handle_broker_message, rcv_chan, config, hostname)
+
+    log.info(f"Starting local TCP server at {hostname}:{port} ..." )
+    server = await asyncio.start_server(controller.handle_agent_process, hostname, port)
+
+    return server, snd_trans, snd_proto, rcv_trans, rcv_proto
+
+async def do_cleanup(server, snd_trans, snd_proto, rcv_trans, rcv_proto):
     """
     Cleanup the running processes.
     """
 
+    log.info("Closing local TCP server ..")
     server.close()
     await server.wait_closed()
+
+    log.info("Closing AMQP send and receive channels ...")
+    await snd_proto.close()
+    await rcv_proto.close()
+    snd_trans.close()
+    rcv_trans.close()
 
 def main_controller(config, hostname):
     """
@@ -213,10 +332,14 @@ def main_controller(config, hostname):
 
     loop = asyncio.get_event_loop()
 
-    server = loop.run_until_complete(do_startup(config, hostname, state_store, loop))
+    resources = loop.run_until_complete(do_startup(config, hostname, state_store, loop))
     loop.run_forever()
-    loop.run_until_complete(do_cleanup(server))
+    loop.run_until_complete(do_cleanup(*resources))
 
-    pending = asyncio.Task.all_tasks()
-    loop.run_until_complete(asyncio.gather(*pending))
+    pending_tasks = asyncio.Task.all_tasks()
+    for task in pending_tasks:
+        try:
+            loop.run_until_complete(task)
+        except asyncio.CancelledError:
+            pass
     loop.close()
