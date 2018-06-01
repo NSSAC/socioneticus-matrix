@@ -1,0 +1,42 @@
+# Matrix controller sample configuration
+
+# How to connect to RabbitMQ
+rabbitmq_host: localhost
+rabbitmq_port: 5672
+rabbitmq_username: user
+rabbitmq_password: user
+event_exchange: events
+
+# The TCP port the controllers should listen to
+# for incoming connections agent connections
+controller_port: 16001
+
+# Hostnames of the systems
+# on which the controllers are to run
+sim_nodes:
+    - 127.1.0.1
+
+# The number of agent processes
+# that will run on each host
+num_agentprocs:
+    127.1.0.1: 1
+
+# The root seed
+root_seed: 42
+
+# The state module to be used
+# for updating the event store
+state_store_module: matrix.dummystore
+
+# The data store location
+# Environment variables can be used here
+state_dsn: $HOME/data/matrix_sims/events.db
+
+# Number of rounds to run the simulation for
+num_rounds: 10
+
+# Starting time of the simulation
+start_time: 2018-06-01
+
+# The time a single round represents
+round_time: 1h

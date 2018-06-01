@@ -3,88 +3,51 @@ Test the matrix controller with the dummy agents.
 """
 # pylint: disable=redefined-outer-name
 
-import random
 import time
-from subprocess import Popen as _Popen
 
-import pytest
-
-SAMPLE_CONFIG = """
-controller_port: {port}
+SINGLE_NODE_TEST_CONFIG = """
+rabbitmq_host: localhost
+rabbitmq_port: 5672
+rabbitmq_username: user
+rabbitmq_password: user
+event_exchange: events
+controller_port: 17001
 sim_nodes:
-    - 127.0.0.1
+    - 127.1.0.1
 num_agentprocs:
-    127.0.0.1: {num_agentprocs}
+    127.1.0.1: 1
 root_seed: 42
 state_store_module: matrix.dummystore
 state_dsn: {state_dsn}
-num_rounds: {rounds}
-start_time: 2018-01-01
+num_rounds: 10
+start_time: 2018-06-01
 round_time: 1h
 """
 
-@pytest.fixture
-def random_tcp_port():
-    """
-    Return a random port.
-    """
-
-    port_range = list(range(16000, 17000))
-    return random.choice(port_range)
-
-@pytest.fixture
-def popener():
-    """
-    Fixture for cleanly killing Popen objects.
-    """
-
-    procs = []
-
-    def do_Popen(*args, **kwargs):
-        proc = _Popen(*args, **kwargs)
-        procs.append(proc)
-        return proc
-
-    yield do_Popen
-
-    for proc in procs:
-        if proc.poll() is None:
-            proc.terminate()
-            if proc.poll() is None:
-                proc.kill()
-
-def test_dummy(tmpdir, random_tcp_port, popener):
+def test_dummy(tempdir, popener):
     """
     Test the basic overall run with one agent.
     """
 
-    state_dsn = str(tmpdir.join("state.db"))
-    config_fname = str(tmpdir.join("matrix.conf"))
-    port = random_tcp_port
-    num_agentprocs = 1
-    rounds = 10
+    config_fname = tempdir / "matrix.conf"
+    state_dsn = tempdir / "state.db"
 
     with open(config_fname, "wt") as fobj:
-        fobj.write(SAMPLE_CONFIG.format(
-            state_dsn=state_dsn,
-            config_fname=config_fname,
-            port=port,
-            num_agentprocs=num_agentprocs,
-            rounds=rounds))
+        fobj.write(SINGLE_NODE_TEST_CONFIG.format(state_dsn=state_dsn))
 
     # Initialize state store
-    cmd = f"matrix dummystoreinit -s '{state_dsn}'"
-    assert popener(cmd, shell=True).wait() == 0
+    cmd = f"matrix dummystoreinit -s {state_dsn}"
+    assert popener(cmd, shell=True, output_prefix="dummystoreinit").wait() == 0
 
     # Start controller
-    cmd = f"matrix controller -c {config_fname} -h 127.0.0.1"
-    controller = popener(cmd, shell=True)
+    cmd = f"matrix controller -c {config_fname} -h 127.1.0.1"
+    controller = popener(cmd, shell=True, output_prefix="controller")
 
     time.sleep(1)
 
     # Start dummyagent process
-    cmd = f"matrix dummyagent -p {port} -s {state_dsn} -i 1"
-    agentproc = popener(cmd, shell=True)
+    cmd = f"matrix dummyagent -h 127.1.0.1 -p 17001 -s {state_dsn} -i 1"
+    agentproc = popener(cmd, shell=True, output_prefix="dummyagent-1")
 
     agentproc_retcode = agentproc.wait()
     assert agentproc_retcode == 0
@@ -92,44 +55,71 @@ def test_dummy(tmpdir, random_tcp_port, popener):
     controller_retcode = controller.wait()
     assert controller_retcode == 0
 
+SEVEN_NODE_TEST_CONFIG = """
+rabbitmq_host: localhost
+rabbitmq_port: 5672
+rabbitmq_username: user
+rabbitmq_password: user
+event_exchange: events
+controller_port: 17001
+sim_nodes:
+    - 127.1.0.1
+    - 127.1.0.2
+    - 127.1.0.3
+    - 127.1.0.4
+    - 127.1.0.5
+    - 127.1.0.6
+    - 127.1.0.7
+num_agentprocs:
+    127.1.0.1: 10
+    127.1.0.2: 10
+    127.1.0.3: 10
+    127.1.0.4: 10
+    127.1.0.5: 10
+    127.1.0.6: 10
+    127.1.0.7: 10
+root_seed: 42
+state_store_module: matrix.dummystore
+state_dsn: {state_dsn}
+num_rounds: 2
+start_time: 2018-06-01
+round_time: 1h
+"""
 
-def test_dummy2(tmpdir, random_tcp_port, popener):
+def test_dummy7(tempdir, popener):
     """
-    Test the basic overall run with two agents.
+    Test the basic overall run with 7 nodes with 10 agents each.
     """
 
-    state_dsn = str(tmpdir.join("state.db"))
-    config_fname = str(tmpdir.join("matrix.conf"))
-    port = random_tcp_port
-    num_agentprocs = 7
-    rounds = 10
+    num_nodes = 7
+    num_agentprocs = 10
 
-    with open(config_fname, "wt") as fobj:
-        fobj.write(SAMPLE_CONFIG.format(
-            state_dsn=state_dsn,
-            config_fname=config_fname,
-            port=port,
-            num_agentprocs=num_agentprocs,
-            rounds=rounds))
+    nodes = list(range(1, num_nodes + 1))
+    procs = []
 
-    # Initialize state store
-    cmd = f"matrix dummystoreinit -s '{state_dsn}'"
-    assert popener(cmd, shell=True).wait() == 0
+    for node in nodes:
+        config_fname = tempdir / f"matrix-{node}.conf"
+        state_dsn = tempdir / f"state-{node}.db"
 
-    # Start controller
-    cmd = f"matrix controller -c {config_fname} -h 127.0.0.1"
-    controller = popener(cmd, shell=True)
+        with open(config_fname, "wt") as fobj:
+            fobj.write(SEVEN_NODE_TEST_CONFIG.format(state_dsn=state_dsn))
+
+        cmd = f"matrix dummystoreinit -s {state_dsn}"
+        assert popener(cmd, shell=True, output_prefix=f"dummystoreinit-{node}").wait() == 0
+
+        # Start controller
+        cmd = f"matrix controller -c {config_fname} -h 127.1.0.{node}"
+        controller = popener(cmd, shell=True, output_prefix=f"controller-{node}")
+        procs.append(controller)
 
     time.sleep(1)
 
-    agentprocs = []
-    for i in range(1, num_agentprocs + 1):
-        # Start dummyagent processes
-        cmd = f"matrix dummyagent -p {port} -s {state_dsn} -i {i}"
-        agentproc = popener(cmd, shell=True)
-        agentprocs.append(agentproc)
+    for node in nodes:
+        for agentproc_id in range(1, num_agentprocs + 1):
+            # Start dummyagent process
+            cmd = f"matrix dummyagent -h 127.1.0.{node} -p 17001 -s {state_dsn} -i {agentproc_id}"
+            agentproc = popener(cmd, shell=True, output_prefix=f"dummyagent-{node}-{agentproc_id}")
+            procs.append(agentproc)
 
-    for agentproc in agentprocs:
-        assert agentproc.wait() == 0
-
-    assert controller.wait() == 0
+    for proc in procs:
+        assert proc.wait() == 0

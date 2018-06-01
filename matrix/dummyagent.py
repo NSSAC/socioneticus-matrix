@@ -10,7 +10,7 @@ import logbook
 from .agent_common import RPCProxy
 from .dummystore import get_state_store
 
-_log = logbook.Logger(__name__)
+log = logbook.Logger(__name__)
 
 def do_something(host, agentproc_id, num_agents, state_store, round_info):
     """
@@ -61,6 +61,7 @@ def main_dummyagent(**kwargs):
 
         while True:
             round_info = proxy.call("can_we_start_yet")
+            log.info(f"round {round_info['cur_round']} ...")
             if round_info["cur_round"] == -1:
                 return
 

@@ -48,6 +48,34 @@ def parse_interval(text):
             sys.exit(1)
     return interval
 
+def parse_config(config_fname, hostname):
+    """
+    Parse the matrix controller configuration file.
+    """
+
+    with open(config_fname) as fobj:
+        cfg = yaml.load(fobj)
+    cfg = AttrDict(cfg)
+
+    if len(set(cfg.sim_nodes)) != len(cfg.sim_nodes):
+        print("Duplicate hostnames in node list")
+        sys.exit(1)
+
+    for node_name in cfg.sim_nodes:
+        if node_name not in cfg.num_agentprocs:
+            print(f"Number of agents on host {node_name} is not defined")
+            sys.exit(1)
+
+    if hostname not in cfg.sim_nodes:
+        print(f"Hostname not in configured node list")
+        sys.exit(1)
+
+    cfg.state_dsn = os.path.expandvars(cfg.state_dsn)
+    cfg.start_time = parse_timestamp(cfg.start_time)
+    cfg.round_time = parse_interval(cfg.round_time)
+
+    return cfg
+
 @click.group()
 def cli():
     """
@@ -70,17 +98,7 @@ def controller(config, hostname):
     Start a controller process.
     """
 
-    with open(config) as fobj:
-        cfg = yaml.load(fobj)
-    cfg = AttrDict(cfg)
-
-    if hostname not in cfg.sim_nodes:
-        print(f"Hostname not in configured node list")
-        sys.exit(1)
-
-    cfg.state_dsn = os.path.expandvars(cfg.state_dsn)
-    cfg.start_time = parse_timestamp(cfg.start_time)
-    cfg.round_time = parse_interval(cfg.round_time)
+    cfg = parse_config(config, hostname)
 
     return main_controller(cfg, hostname)
 
@@ -114,7 +132,7 @@ def dummystoreinit(**kwargs):
               type=int,
               help="Agent process id")
 @click.option("--num-agents",
-              default=10,
+              default=1,
               help="Number of agents this process simulates")
 def dummyagent(**kwargs):
     """
