@@ -45,8 +45,6 @@ def main_dummyagent(**kwargs):
         Run num_agents, which cycle betweem states rock, paper, and scissors.
     """
 
-    logbook.StderrHandler().push_application()
-
     host = kwargs["ctrl_host"]
     port = kwargs["ctrl_port"]
     state_dsn = kwargs["state_dsn"]

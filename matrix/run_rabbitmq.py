@@ -86,8 +86,6 @@ def main_run_rabbitmq(config_fname, runtime_dir, hostname):
     Run rabbitmq.
     """
 
-    logbook.StderrHandler().push_application()
-
     config_fname = Path(config_fname).absolute()
     runtime_dir = Path(runtime_dir).absolute()
 

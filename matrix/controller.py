@@ -313,8 +313,6 @@ def main_controller(config, hostname):
     Controller process starting point.
     """
 
-    logbook.StderrHandler().push_application()
-
     state_store_module = config.state_store_module
     state_dsn = config.state_dsn
 

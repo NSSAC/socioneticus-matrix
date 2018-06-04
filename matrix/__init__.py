@@ -10,6 +10,7 @@ from calendar import timegm
 import yaml
 import click
 import logbook
+from logbook.compat import redirect_logging
 from attrdict import AttrDict
 
 from .controller import main_controller
@@ -17,13 +18,15 @@ from .dummyagent import main_dummyagent
 from .dummystore import main_dummystoreinit
 from .run_rabbitmq import main_run_rabbitmq
 
+log = logbook.Logger(__name__)
+
 def parse_timestamp(dt):
     """
     Parse timestamp from date.
     """
 
     if not isinstance(dt, date):
-        print(f"Invalid date '{dt}'")
+        log.error(f"Invalid date '{dt}'")
         sys.exit(1)
 
     ts = datetime(dt.year, dt.month, dt.day)
@@ -44,7 +47,7 @@ def parse_interval(text):
         try:
             interval += int(x) * INTERVAL_SUFFIXES[suffix]
         except (ValueError, KeyError):
-            print(f"Invalid interval '{text}'")
+            log.error(f"Invalid interval '{text}'")
             sys.exit(1)
     return interval
 
@@ -58,16 +61,16 @@ def parse_config(config_fname, hostname):
     cfg = AttrDict(cfg)
 
     if len(set(cfg.sim_nodes)) != len(cfg.sim_nodes):
-        print("Duplicate hostnames in node list")
+        log.error("Duplicate hostnames in node list")
         sys.exit(1)
 
     for node_name in cfg.sim_nodes:
         if node_name not in cfg.num_agentprocs:
-            print(f"Number of agents on host {node_name} is not defined")
+            log.error(f"Number of agents on host {node_name} is not defined")
             sys.exit(1)
 
     if hostname not in cfg.sim_nodes:
-        print(f"Hostname not in configured node list")
+        log.error(f"Hostname not in configured node list")
         sys.exit(1)
 
     cfg.state_dsn = os.path.expandvars(cfg.state_dsn)
@@ -77,12 +80,19 @@ def parse_config(config_fname, hostname):
     return cfg
 
 @click.group()
-def cli():
+@click.option('--debug/--no-debug', default=False)
+@click.option('--logtostderr/--no-logtostderr', default=True)
+def cli(debug, logtostderr):
     """
     Matrix: A distributed ABM platform.
     """
 
-    pass
+    if logtostderr:
+        if debug:
+            logbook.StderrHandler(logbook.DEBUG).push_application()
+        else:
+            logbook.StderrHandler(logbook.INFO).push_application()
+        redirect_logging()
 
 @cli.command()
 @click.option("-c", "--config",
