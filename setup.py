@@ -10,7 +10,8 @@ setup(
         "Click",
         "logbook",
         "attrdict",
-        "pyyaml"
+        "pyyaml",
+        "aioamqp",
     ],
 
     entry_points="""
