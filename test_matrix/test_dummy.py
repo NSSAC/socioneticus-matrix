@@ -36,7 +36,7 @@ def test_dummy(tempdir, popener):
         fobj.write(SINGLE_NODE_TEST_CONFIG.format(state_dsn=state_dsn))
 
     # Initialize state store
-    cmd = f"matrix dummystoreinit -s {state_dsn}"
+    cmd = f"matrix dummyagent storeinit -s {state_dsn}"
     assert popener(cmd, shell=True, output_prefix="dummystoreinit").wait() == 0
 
     # Start controller
@@ -46,7 +46,7 @@ def test_dummy(tempdir, popener):
     time.sleep(1)
 
     # Start dummyagent process
-    cmd = f"matrix dummyagent -h 127.1.0.1 -p 17001 -s {state_dsn} -i 1"
+    cmd = f"matrix dummyagent start -h 127.1.0.1 -p 17001 -s {state_dsn} -i 1"
     agentproc = popener(cmd, shell=True, output_prefix="dummyagent-1")
 
     agentproc_retcode = agentproc.wait()
@@ -104,7 +104,7 @@ def test_dummy7(tempdir, popener):
         with open(config_fname, "wt") as fobj:
             fobj.write(SEVEN_NODE_TEST_CONFIG.format(state_dsn=state_dsn))
 
-        cmd = f"matrix dummystoreinit -s {state_dsn}"
+        cmd = f"matrix dummyagent storeinit -s {state_dsn}"
         assert popener(cmd, shell=True, output_prefix=f"dummystoreinit-{node}").wait() == 0
 
         # Start controller
@@ -117,7 +117,7 @@ def test_dummy7(tempdir, popener):
     for node in nodes:
         for agentproc_id in range(1, num_agentprocs + 1):
             # Start dummyagent process
-            cmd = f"matrix dummyagent -h 127.1.0.{node} -p 17001 -s {state_dsn} -i {agentproc_id}"
+            cmd = f"matrix dummyagent start -h 127.1.0.{node} -p 17001 -s {state_dsn} -i {agentproc_id}"
             agentproc = popener(cmd, shell=True, output_prefix=f"dummyagent-{node}-{agentproc_id}")
             procs.append(agentproc)
 
