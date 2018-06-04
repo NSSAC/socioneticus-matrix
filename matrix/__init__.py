@@ -9,9 +9,10 @@ from calendar import timegm
 
 import yaml
 import click
+from attrdict import AttrDict
 import logbook
 from logbook.compat import redirect_logging
-from attrdict import AttrDict
+from logbook.handlers import Handler, NOTSET
 
 from .controller import main_controller
 from .dummyagent import main_dummyagent
@@ -79,6 +80,22 @@ def parse_config(config_fname, hostname):
 
     return cfg
 
+class ChannelFilterHandler(Handler):
+    """
+    A handler that gobbles up events from specific channels.
+    """
+
+    blackhole = True
+
+    def __init__(self, channels, level=NOTSET, filter=None):
+        super().__init__(level=level, filter=filter, bubble=False)
+        self.channels = set(channels)
+
+    def should_handle(self, record):
+        if (record.level >= self.level and record.channel in self.channels):
+            return True
+        return False
+
 @click.group()
 @click.option('--debug/--no-debug', default=False)
 @click.option('--logtostderr/--no-logtostderr', default=True)
@@ -92,6 +109,8 @@ def cli(debug, logtostderr):
             logbook.StderrHandler(logbook.DEBUG).push_application()
         else:
             logbook.StderrHandler(logbook.INFO).push_application()
+            ChannelFilterHandler(["aioamqp.protocol"]).push_application()
+
         redirect_logging()
 
 @cli.command()
