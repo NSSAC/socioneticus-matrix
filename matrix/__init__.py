@@ -52,7 +52,7 @@ def parse_interval(text):
             sys.exit(1)
     return interval
 
-def parse_config(config_fname, hostname):
+def parse_config(config_fname, nodename):
     """
     Parse the matrix controller configuration file.
     """
@@ -62,19 +62,25 @@ def parse_config(config_fname, hostname):
     cfg = AttrDict(cfg)
 
     if len(set(cfg.sim_nodes)) != len(cfg.sim_nodes):
-        log.error("Duplicate hostnames in node list")
+        log.error("Duplicate nodename in node list")
         sys.exit(1)
 
-    for node_name in cfg.sim_nodes:
-        if node_name not in cfg.num_agentprocs:
-            log.error(f"Number of agents on host {node_name} is not defined")
+    for node in cfg.sim_nodes:
+        if node not in cfg.num_agentprocs:
+            log.error(f"Number of agents on node {node} is not defined")
+            sys.exit(1)
+        if node not in cfg.controller_port:
+            log.error(f"Controller port for node {node} is not defined")
+            sys.exit(1)
+        if node not in cfg.state_dsn:
+            log.error(f"Data store location for node {node} is not defined")
             sys.exit(1)
 
-    if hostname not in cfg.sim_nodes:
-        log.error(f"Hostname not in configured node list")
+    if nodename not in cfg.sim_nodes:
+        log.error(f"Nodename not in configured node list")
         sys.exit(1)
 
-    cfg.state_dsn = os.path.expandvars(cfg.state_dsn)
+    cfg.state_dsn = {k: os.path.expandvars(v) for k, v in cfg.state_dsn.items()}
     cfg.start_time = parse_timestamp(cfg.start_time)
     cfg.round_time = parse_interval(cfg.round_time)
 
@@ -122,18 +128,18 @@ def cli(debug, logtostderr):
               required=True,
               type=click.Path(exists=True, dir_okay=False),
               help="Controller configuration file")
-@click.option("-h", "--hostname",
+@click.option("-n", "--nodename",
               required=True,
               type=str,
-              help="Controller hostname")
-def controller(config, hostname):
+              help="Controller nodename")
+def controller(config, nodename):
     """
     Start a controller process.
     """
 
-    cfg = parse_config(config, hostname)
+    cfg = parse_config(config, nodename)
 
-    return main_controller(cfg, hostname)
+    return main_controller(cfg, nodename)
 
 @cli.group()
 def dummyagent():
@@ -156,10 +162,10 @@ def dummyagent_storeinit(**kwargs):
     main_dummystoreinit(**kwargs)
 
 @dummyagent.command("start")
-@click.option("-h", "--ctrl-host",
+@click.option("-n", "--ctrl-node",
               required=True,
               type=str,
-              help="Controller host")
+              help="Controller node name")
 @click.option("-p", "--ctrl-port",
               required=True,
               type=int,
@@ -172,7 +178,7 @@ def dummyagent_storeinit(**kwargs):
               required=True,
               type=int,
               help="Agent process id")
-@click.option("--num-agents",
+@click.option("-m", "--num-agents",
               default=1,
               help="Number of agents this process simulates")
 def dummyagent_start(**kwargs):

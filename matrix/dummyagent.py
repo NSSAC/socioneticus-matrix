@@ -12,14 +12,14 @@ from .dummystore import get_state_store
 
 log = logbook.Logger(__name__)
 
-def do_something(host, agentproc_id, num_agents, state_store, round_info):
+def do_something(nodename, agentproc_id, num_agents, state_store, round_info):
     """
     Generate the events for the current round.
     """
 
     events = []
     for agent_idx in range(num_agents):
-        agent_id = f"{host}-{agentproc_id}-{agent_idx}"
+        agent_id = f"{nodename}-{agentproc_id}-{agent_idx}"
         prev_state = state_store.get_prev_state(agentproc_id)
         if prev_state is None:
             prev_state = random.choice(["rock", "paper", "scissors"])
@@ -45,13 +45,13 @@ def main_dummyagent(**kwargs):
         Run num_agents, which cycle betweem states rock, paper, and scissors.
     """
 
-    host = kwargs["ctrl_host"]
+    node = kwargs["ctrl_node"]
     port = kwargs["ctrl_port"]
     state_dsn = kwargs["state_dsn"]
     agentproc_id = kwargs["agentproc_id"]
     num_agents = kwargs["num_agents"]
 
-    with RPCProxy(host, port) as proxy:
+    with RPCProxy("127.0.0.1", port) as proxy:
         state_store = get_state_store(state_dsn)
 
         agentproc_seed = proxy.call("get_agentproc_seed", agentproc_id=agentproc_id)
@@ -63,5 +63,5 @@ def main_dummyagent(**kwargs):
             if round_info["cur_round"] == -1:
                 return
 
-            events = do_something(host, agentproc_id, num_agents, state_store, round_info)
+            events = do_something(node, agentproc_id, num_agents, state_store, round_info)
             proxy.call("register_events", events=events)

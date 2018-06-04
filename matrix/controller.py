@@ -55,9 +55,9 @@ class Controller: # pylint: disable=too-many-instance-attributes
     Controller object.
     """
 
-    def __init__(self, config, hostname, state_store, snd_chan, loop):
+    def __init__(self, config, nodename, state_store, snd_chan, loop):
         self.num_controllers = len(config.sim_nodes)
-        self.num_agentprocs = config.num_agentprocs[hostname]
+        self.num_agentprocs = config.num_agentprocs[nodename]
         self.num_rounds = config.num_rounds
         self.start_time = config.start_time
         self.round_time = config.round_time
@@ -65,7 +65,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
         # Generate the seed for the current controller
         random.seed(config.root_seed, version=2)
         controller_seeds = [randint() for _ in config.sim_nodes]
-        controller_index = config.sim_nodes.index(hostname)
+        controller_index = config.sim_nodes.index(nodename)
         self.controller_seed = controller_seeds[controller_index]
 
         # Generate seeds for agent processes
@@ -77,7 +77,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
         # Info needed to send messages to the broker
         self.snd_chan = snd_chan
         self.event_exchange = config.event_exchange
-        self.hostname = hostname
+        self.nodename = nodename
 
         # The event loop
         self.loop = loop
@@ -145,7 +145,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
         message = json.dumps(None).encode("utf-8")
         await self.snd_chan.basic_publish(message,
                                           exchange_name=self.event_exchange,
-                                          routing_key=self.hostname)
+                                          routing_key=self.nodename)
     async def can_we_start_yet(self):
         """
         RPC method, returns when agent process to allowed to begin executing current round.
@@ -172,7 +172,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
         message = json.dumps(events).encode("utf-8")
         await self.snd_chan.basic_publish(message,
                                           exchange_name=self.event_exchange,
-                                          routing_key=self.hostname)
+                                          routing_key=self.nodename)
         return True
 
 
@@ -252,7 +252,7 @@ async def make_amqp_channel(config):
     channel = await protocol.channel()
     return transport, protocol, channel
 
-async def make_receiver_queue(callback, channel, config, hostname):
+async def make_receiver_queue(callback, channel, config, nodename):
     """
     Make the receiver queue and bind to topics.
     """
@@ -262,17 +262,17 @@ async def make_receiver_queue(callback, channel, config, hostname):
 
     await channel.queue_bind(exchange_name=config.event_exchange,
                              queue_name=queue_name,
-                             routing_key=hostname)
+                             routing_key=nodename)
 
     await channel.basic_consume(callback, queue_name=queue_name)
     return queue
 
-async def do_startup(config, hostname, state_store, loop):
+async def do_startup(config, nodename, state_store, loop):
     """
     Start the matrix controller.
     """
 
-    port = config.controller_port
+    port = config.controller_port[nodename]
 
     log.info("Creating AMQP send channel ...")
     snd_trans, snd_proto, snd_chan = await make_amqp_channel(config)
@@ -283,13 +283,13 @@ async def do_startup(config, hostname, state_store, loop):
     log.info("Setting up event exchange ...")
     await snd_chan.exchange_declare(exchange_name=config.event_exchange, type_name='fanout')
 
-    controller = Controller(config, hostname, state_store, snd_chan, loop)
+    controller = Controller(config, nodename, state_store, snd_chan, loop)
 
     log.info("Setting up AMQP receiver ...")
-    await make_receiver_queue(controller.handle_broker_message, rcv_chan, config, hostname)
+    await make_receiver_queue(controller.handle_broker_message, rcv_chan, config, nodename)
 
-    log.info(f"Starting local TCP server at {hostname}:{port} ..." )
-    server = await asyncio.start_server(controller.handle_agent_process, hostname, port)
+    log.info(f"Starting local TCP server at 127.0.0.1:{port} ..." )
+    server = await asyncio.start_server(controller.handle_agent_process, "127.0.0.1", port)
 
     return server, snd_trans, snd_proto, rcv_trans, rcv_proto
 
@@ -308,13 +308,13 @@ async def do_cleanup(server, snd_trans, snd_proto, rcv_trans, rcv_proto):
     snd_trans.close()
     rcv_trans.close()
 
-def main_controller(config, hostname):
+def main_controller(config, nodename):
     """
     Controller process starting point.
     """
 
     state_store_module = config.state_store_module
-    state_dsn = config.state_dsn
+    state_dsn = config.state_dsn[nodename]
 
     try:
         state_store_module = importlib.import_module(state_store_module)
@@ -330,7 +330,7 @@ def main_controller(config, hostname):
 
     loop = asyncio.get_event_loop()
 
-    resources = loop.run_until_complete(do_startup(config, hostname, state_store, loop))
+    resources = loop.run_until_complete(do_startup(config, nodename, state_store, loop))
     loop.run_forever()
     loop.run_until_complete(do_cleanup(*resources))
 
