@@ -49,7 +49,7 @@ def cleanup(signame):
 
     return do_cleanup
 
-def startup(config_fname, mnesia_base, log_base, hostname):
+def startup(config_fname, mnesia_base, log_base, hostname, pid_fname):
     """
     Start rabbitmq-server.
     """
@@ -77,13 +77,17 @@ def startup(config_fname, mnesia_base, log_base, hostname):
     for signame in TERM_SIGNALS:
         signal.signal(getattr(signal, signame), cleanup(signame))
 
+    # Writing pid to file
+    with open(pid_fname, "wt") as fobj:
+        fobj.write(str(os.getpid()))
+
     log.info("Waiting for processes to finish ..")
     for proc in [rabbitmq, epmd]:
         proc.wait()
 
-def main_run_rabbitmq(config_fname, runtime_dir, hostname):
+def main_rabbitmq_start(config_fname, runtime_dir, hostname):
     """
-    Run rabbitmq.
+    Start rabbitmq server.
     """
 
     config_fname = Path(config_fname).absolute()
@@ -92,6 +96,7 @@ def main_run_rabbitmq(config_fname, runtime_dir, hostname):
     config_fname = config_fname.parent / config_fname.stem
     mnesia_base = runtime_dir / "mnesia"
     log_base = runtime_dir / "log"
+    pid_fname = runtime_dir / "run_rabbitmq.pid"
 
     if not mnesia_base.exists():
         log.info(f"Creating directory {mnesia_base}")
@@ -100,4 +105,16 @@ def main_run_rabbitmq(config_fname, runtime_dir, hostname):
         log.info(f"Creating directory {log_base}")
         log_base.mkdir(mode=0o700)
 
-    startup(config_fname, mnesia_base, log_base, hostname)
+    startup(config_fname, mnesia_base, log_base, hostname, pid_fname)
+
+def main_rabbitmq_stop(runtime_dir):
+    """
+    Stop rabbitmq server.
+    """
+
+    runtime_dir = Path(runtime_dir).absolute()
+    pid_fname = runtime_dir / "run_rabbitmq.pid"
+
+    with open(pid_fname, "rt") as fobj:
+        pid = int(fobj.read())
+        os.kill(pid, signal.SIGTERM)

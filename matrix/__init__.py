@@ -17,7 +17,7 @@ from logbook.handlers import Handler, NOTSET
 from .controller import main_controller
 from .dummyagent import main_dummyagent
 from .dummystore import main_dummystoreinit
-from .run_rabbitmq import main_run_rabbitmq
+from .run_rabbitmq import main_rabbitmq_start, main_rabbitmq_stop
 
 log = logbook.Logger(__name__)
 
@@ -135,19 +135,27 @@ def controller(config, hostname):
 
     return main_controller(cfg, hostname)
 
-@cli.command()
+@cli.group()
+def dummyagent():
+    """
+    Run/initialize dummyagent.
+    """
+
+    pass
+
+@dummyagent.command("storeinit")
 @click.option("-s", "--state-dsn",
               required=True,
               type=click.Path(dir_okay=False, writable=True),
               help="System state data source name")
-def dummystoreinit(**kwargs):
+def dummyagent_storeinit(**kwargs):
     """
     Initialize the dummystore database.
     """
 
     main_dummystoreinit(**kwargs)
 
-@cli.command()
+@dummyagent.command("start")
 @click.option("-h", "--ctrl-host",
               required=True,
               type=str,
@@ -167,14 +175,20 @@ def dummystoreinit(**kwargs):
 @click.option("--num-agents",
               default=1,
               help="Number of agents this process simulates")
-def dummyagent(**kwargs):
+def dummyagent_start(**kwargs):
     """
     Start a dummyagent process.
     """
 
     return main_dummyagent(**kwargs)
 
-@cli.command("run-rabbitmq")
+@cli.group()
+def rabbitmq():
+    """
+    Start/stop rabbitmq.
+    """
+
+@rabbitmq.command("start")
 @click.option("-c", "--config",
               required=True,
               type=click.Path(exists=True, dir_okay=False),
@@ -187,9 +201,21 @@ def dummyagent(**kwargs):
               required=True,
               type=str,
               help="Hostname for rabbitmq to bind to")
-def run_rabbitmq(config, runtime_dir, hostname):
+def rabbitmq_start(config, runtime_dir, hostname):
     """
     Start the rabbitmq server.
     """
 
-    main_run_rabbitmq(config, runtime_dir, hostname)
+    main_rabbitmq_start(config, runtime_dir, hostname)
+
+@rabbitmq.command("stop")
+@click.option("-r", "--runtime-dir",
+              required=True,
+              type=click.Path(exists=True, file_okay=False, dir_okay=True),
+              help="Rabbitmq runtime directory")
+def rabbitmq_stop(runtime_dir):
+    """
+    Stop the rabbitmq server.
+    """
+
+    main_rabbitmq_stop(runtime_dir)
