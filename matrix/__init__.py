@@ -87,7 +87,7 @@ class ChannelFilterHandler(Handler):
 
     blackhole = True
 
-    def __init__(self, channels, level=NOTSET, filter=None):
+    def __init__(self, channels, level=NOTSET, filter=None): # pylint: disable=redefined-builtin
         super().__init__(level=level, filter=filter, bubble=False)
         self.channels = set(channels)
 
@@ -97,8 +97,12 @@ class ChannelFilterHandler(Handler):
         return False
 
 @click.group()
-@click.option('--debug/--no-debug', default=False)
-@click.option('--logtostderr/--no-logtostderr', default=True)
+@click.option('--debug/--no-debug',
+              default=False,
+              help="Enable/disable debug logging")
+@click.option('--logtostderr/--no-logtostderr',
+              default=True,
+              help="Enable/disable logging to stderr")
 def cli(debug, logtostderr):
     """
     Matrix: A distributed ABM platform.
