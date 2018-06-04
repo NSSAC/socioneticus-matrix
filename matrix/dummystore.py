@@ -8,6 +8,10 @@ that play well with the controller.
 
 import sqlite3
 
+def event_sort_key(event):
+    agent_id, _, cur_time, round_num = event
+    return round_num, cur_time, agent_id
+
 class DummyStore:
     """
     Class for storing stuff.
@@ -36,6 +40,8 @@ class DummyStore:
 
         if not self.event_cache:
             return
+
+        self.event_cache.sort(key=event_sort_key)
 
         with self.con:
             cur = self.con.cursor()
