@@ -7,7 +7,6 @@ rabbitmq_username: user
 rabbitmq_password: user
 event_exchange: events
 
-
 # Names of the nodes that the controller will run on.
 # These need not be real hostnames.
 sim_nodes:

@@ -6,6 +6,7 @@ import os
 import sys
 from datetime import datetime, date
 from calendar import timegm
+import configparser
 
 import yaml
 import click
@@ -225,3 +226,84 @@ def rabbitmq_stop(runtime_dir):
     """
 
     main_rabbitmq_stop(runtime_dir)
+
+@cli.group()
+def updateconfig():
+    """
+    Update controller configuration file.
+    """
+
+@updateconfig.command("rabbitmq")
+@click.option("-i", "--rabbitmq-config",
+              required=True,
+              type=click.Path(exists=True, dir_okay=False),
+              help="Rabbitmq configuration file")
+@click.option("-h", "--hostname",
+              required=True,
+              type=str,
+              help="Hostname where rabbitmq is running")
+@click.option("-o", "--controller-config",
+              required=True,
+              type=click.Path(exists=True, dir_okay=False),
+              help="Controller configuration file")
+def updateconfig_rabbitmq(controller_config, rabbitmq_config, hostname):
+    """
+    Add rabbitmq details to controller configuration.
+    """
+
+    with open(controller_config, "rt") as fobj:
+        ccfg = yaml.load(fobj)
+
+    with open(rabbitmq_config, "rt") as fobj:
+        rcfg = configparser.ConfigParser()
+        rcfg.read_string("[default]\n" + fobj.read())
+
+    username = rcfg["default"].get("default_user", "guest")
+    password = rcfg["default"].get("default_pass", "guest")
+    port = int(rcfg["default"].get("listeners.tcp.default", "5672"))
+
+    ccfg["rabbitmq_host"] = hostname
+    ccfg["rabbitmq_port"] = port
+    ccfg["rabbitmq_username"] = username
+    ccfg["rabbitmq_password"] = password
+
+    with open(controller_config, "wt") as fobj:
+        yaml.dump(ccfg, fobj, default_flow_style=False)
+
+@updateconfig.command("nodes")
+@click.option("-p", "--controller-port",
+              required=True,
+              type=int,
+              help="Port where controller will be running")
+@click.option("-n", "--num-agentprocs",
+              required=True,
+              type=int,
+              help="Number of agent processes per node")
+@click.option("-s", "--state-dsn",
+              required=True,
+              type=str,
+              help="State datastore location")
+@click.option("-o", "--controller-config",
+              required=True,
+              type=click.Path(exists=True, dir_okay=False),
+              help="Controller configuration file")
+@click.argument("nodes", nargs=-1, type=str)
+def updateconfig_nodes(controller_port, num_agentprocs, state_dsn, controller_config, nodes):
+    """
+    Add node specific stuff to controller configuration.
+    """
+
+    if len(nodes) < 1:
+        log.error("Need at-least one node name for updating configuration.")
+        sys.exit(1)
+
+    with open(controller_config, "rt") as fobj:
+        ccfg = yaml.load(fobj)
+
+    ccfg["sim_nodes"] = list(nodes)
+    ccfg["controller_port"] = {node: controller_port for node in nodes}
+    ccfg["num_agentprocs"] = {node: num_agentprocs for node in nodes}
+    ccfg["state_dsn"]  = {node: state_dsn for node in nodes}
+
+    with open(controller_config, "wt") as fobj:
+        yaml.dump(ccfg, fobj, default_flow_style=False)
