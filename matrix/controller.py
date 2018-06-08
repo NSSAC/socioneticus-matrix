@@ -191,7 +191,10 @@ class Controller: # pylint: disable=too-many-instance-attributes
         """
         Callback handler, for messages from amqp broker.
 
-        message: the message body from the broker.
+        channel: channel from which message was received
+        body: bytes object body of the message.
+        envelope: envelope
+        _properties: properties
         """
 
         events = json.loads(body.decode("utf-8"))

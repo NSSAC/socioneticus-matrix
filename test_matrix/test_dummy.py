@@ -67,6 +67,12 @@ def do_test_dummy(tempdir, popener, num_nodes, num_agentproc_range):
 
     all_procs = []
 
+    # Start the event logger
+    log_fname = tempdir / "events.log.gz"
+    cmd = f"matrix eventlog -c {config_fname} -o {log_fname}"
+    logger = popener(cmd, shell=True, output_prefix="event-logger")
+    all_procs.append(logger)
+
     # Start all the controllers
     for node in cfg["sim_nodes"]:
         cmd = f"matrix controller -c {config_fname} -n {node}"
@@ -102,7 +108,7 @@ def do_test_dummy(tempdir, popener, num_nodes, num_agentproc_range):
         for rest_state_dsn in rest_state_dsns:
             assert_equal_event_tables(first_state_dsn, rest_state_dsn)
 
-def test_dummy(tempdir, popener):
+def test_dummy1(tempdir, popener):
     """
     Test the basic overall run with one agent.
     """

@@ -16,6 +16,7 @@ from logbook.compat import redirect_logging
 from logbook.handlers import Handler, NOTSET
 
 from .controller import main_controller
+from .eventlog import main_eventlog
 from .dummyagent import main_dummyagent
 from .dummystore import main_dummystoreinit
 from .run_rabbitmq import main_rabbitmq_start, main_rabbitmq_stop
@@ -53,7 +54,7 @@ def parse_interval(text):
             sys.exit(1)
     return interval
 
-def parse_config(config_fname, nodename):
+def parse_config(config_fname, nodename=None):
     """
     Parse the matrix controller configuration file.
     """
@@ -77,7 +78,7 @@ def parse_config(config_fname, nodename):
             log.error(f"Data store location for node {node} is not defined")
             sys.exit(1)
 
-    if nodename not in cfg.sim_nodes:
+    if nodename is not None and nodename not in cfg.sim_nodes:
         log.error(f"Nodename not in configured node list")
         sys.exit(1)
 
@@ -141,6 +142,23 @@ def controller(config, nodename):
     cfg = parse_config(config, nodename)
 
     return main_controller(cfg, nodename)
+
+@cli.command()
+@click.option("-c", "--config",
+              required=True,
+              type=click.Path(exists=True, dir_okay=False),
+              help="Controller configuration file")
+@click.option("-o", "--output",
+              required=True,
+              type=click.Path(exists=False, dir_okay=False),
+              help="Event log file")
+def eventlog(config, output):
+    """
+    Start the event log collecter.
+    """
+
+    cfg = parse_config(config)
+    return main_eventlog(cfg, output)
 
 @cli.group()
 def dummyagent():
