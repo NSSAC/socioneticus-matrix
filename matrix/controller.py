@@ -16,6 +16,8 @@ from matrix.json_rpc import rpc_dispatch
 
 log = logbook.Logger(__name__)
 
+BUFSIZE = 16 * 2 ** 30
+
 def randint():
     return random.randint(0, 2 ** 32 - 1)
 
@@ -289,7 +291,7 @@ async def do_startup(config, nodename, state_store, loop):
     await make_receiver_queue(controller.handle_broker_message, rcv_chan, config, nodename)
 
     log.info(f"Starting local TCP server at 127.0.0.1:{port} ..." )
-    server = await asyncio.start_server(controller.handle_agent_process, "127.0.0.1", port)
+    server = await asyncio.start_server(controller.handle_agent_process, "127.0.0.1", port, limit=BUFSIZE)
 
     return server, snd_trans, snd_proto, rcv_trans, rcv_proto
 
