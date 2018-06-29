@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="Matrix",
-    version="0.0.7",
+    version="0.2.1",
 
     packages=["matrix"],
 
