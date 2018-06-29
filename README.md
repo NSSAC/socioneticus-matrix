@@ -25,90 +25,160 @@
 
 An agent based modeling framework for social simulation.
 
-## Installation Instructions
+## Installation instructions
 
-It is recommended that you install this package within a virtual environment
-created with either virtualenv or conda.
+It is recommended that you install this package
+within a virtual environment
+created with conda.
 
 ### Creating and activating a conda environment
 
 To create a new virtual environment with conda,
-have Anaconda setup on your system.
+have Anaconda/Miniconda setup on your system.
 Installation instructions for Anaconda can be found at:
 https://conda.io/docs/user-guide/install/index.html
-After installation of Anaconda execute the following commands.
+After installation of Anaconda/Miniconda
+execute the following commands.
 
+```
 $ conda create -n matrixenv python=3
 $ source activate matrixenv
+```
 
-### Creating and activating a virtualenv enviroment
+### Install RabbitMQ
 
-To create a new virtual environment with virtualenv
-install virtualenv using your system's package manager.
-After installation of virtualenv execute the following commands.
+Execute the following command to install RabbitMQ
+within the anaconda environment.
 
-$ virtualenv -p python3 matrixenv
-$ . matrxienv/bin/activate
+```
+$ conda install -c conda-forge rabbitmq-server
+```
 
-### Install matrix
+### Install The Matrix
 
 Copy the current version of the matrix source in the current directory,
 and execute the following command.
 
+```
 $ pip install ./Matrix-VERSION.tar.gz
+```
 
 The above should make the matrix command available.
 You can check if installation was successful with the following command.
 
+```
 $ matrix --help
+```
 
-## Testing Matrix: Simple Setup - one controller and two dummy agent processes
+## Testing Matrix: Simple Setup - Two dummy agent processes on localhost
 
-Start three separate terminal windows and activate the conda or virtualenv
-environment in all of them.
+For this version of the test we will use two dummy agent processes,
+that will run on the localhost.
 
-### Step 1: Create the initial events database
+### Step 1: Prepare the work directory
 
-In the first terminal window, execute the following command
+Open a *new terminal window*, and execute the following commands.
 
-$ matrix dummystoreinit -s event.db
+```
+$ mkdir ~/matrixsim
+$ cd ~/matrixsim
+```
 
-The above command will create an events database representing global state.
+This will create a folder called matrixsim in your home directory.
+Create a file called rabbitmq.conf in the ~/matrixsim using your
+favorite text editor, with the following content.
 
-### Step 2: Start the controller process
+```
+default_user = user
+default_pass = user
+```
 
-Execute the following command in the first terminal window.
+Also in ~/matrixsim, create a file called matrix.yaml
+with the following content.
 
-$ matrix controller -p 16001 -l event.log.gz -s event.db -m matrix.dummystore -n 2 -r 10
+```
+rabbitmq_host: localhost
+rabbitmq_port: 5672
+rabbitmq_username: user
+rabbitmq_password: user
 
-The above command will start a controller process
-that listens on tcp port 16001 for messages from agent processes,
-and writes out events to the event.log.gz file.
-When controller receives events it also passes them on to
-the matrix.dummystore module which is in charge
-of maintaining the current state of the system.
-The controller knows there will be two agent processes sending it events
-and the simulation will run for 10 rounds.
+event_exchange: events
 
-### Step 3: Start two simple agent processes
+sim_nodes:
+    - node1
+controller_port:
+    node1: 16001
+num_agentprocs:
+    node1: 2
+state_dsn:
+    node1: $HOME/matrixsim/events.db
 
-In the second terminal window execute the following command.
+root_seed: 42
+state_store_module: matrix.dummystore
+num_rounds: 10
+start_time: 2018-06-01
+round_time: 1h
+```
 
-$ matrix dummyagent -p 16001 -s event.db -i 1 --num-agents 10
+Now create the initial dummy event database using
+the following commands.
 
-In the third terminal window execute the following command.
+```
+$ source activate matrixenv
+$ matrix dummyagent storeinit -s ~/matrixsim/events.db
+```
 
-$ matrix dummyagent -p 16001 -s event.db -i 2 --num-agents 20
+### Step 2: Start RabbitMQ
 
-The above commands start two dummy agent processes.
-The agent processes are given the port of the controller process
-and location of the events file.
-The ID of the agent process is also specified in the command line.
-The first process simulated 10 dummy agents,
-while the second simulates 20 dummy agents.
+Open a *new terminal window* and execute the following commands:
 
-Once all three of the commands have been started, the simulation should run
-for ten rounds, and all three processes should exit gracefully.
+```
+$ source activate matrixenv
+$ matrix rabbitmq start -c ~/matrixsim/rabbitmq.conf -r ~/matrixsim -h localhost
+```
+
+### Step 3: Start the event logger
+
+Open a *new terminal window* and execute the following commands:
+
+```
+$ source activate matrixenv
+$ matrix eventlog -c ~/matrixsim/matrix.yaml -o ~/matrixsim/events.log.gz
+```
+
+### Step 4: Start the controller
+
+Open a *new terminal window* and execute the following commands:
+
+```
+$ source activate matrixenv
+$ matrix controller -c ~/matrixsim/matrix.yaml -n node1
+```
+
+### Step 5: Start the first dummyagent
+
+Open a *new terminal window* and execute the following commands:
+
+```
+$ source activate matrixenv
+$ matrix dummyagent start -n node1 -p 16001 -s ~/matrixsim/events.db -i 1 -m 10
+```
+
+### Step 6: Start the second dummyagent
+
+Open a *new terminal window* and execute the following commands:
+
+```
+$ source activate matrixenv
+$ matrix dummyagent start -n node1 -p 16001 -s ~/matrixsim/events.db -i 2 -m 10
+```
+
+### Step 7: Cleanup
+
+Wait for the simulation to finish.
+All processes except for the RabbitMQ server should exit gracefully.
+To stop the RabbitMQ process, use hit Ctrl-C on the terminal
+running RabbitMQ.
 
 ## The Matrix Dummy Agent Demo Code
 
