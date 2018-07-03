@@ -2,9 +2,11 @@ from setuptools import setup
 
 setup(
     name="Matrix",
-    version="0.2.1",
 
     packages=["matrix"],
+
+    use_scm_version=True,
+    setup_requires=['setuptools_scm'],
 
     install_requires=[
         "Click",
