@@ -4,6 +4,7 @@ setup(
     name="Matrix",
 
     packages=["matrix"],
+    scripts=["bin/matrix"],
 
     use_scm_version=True,
     setup_requires=['setuptools_scm'],
@@ -14,12 +15,8 @@ setup(
         "attrdict",
         "pyyaml",
         "aioamqp",
+        "blessings"
     ],
-
-    entry_points="""
-        [console_scripts]
-        matrix=matrix:cli
-    """,
 
     description="An modeling framework for social agent simuation.",
 )

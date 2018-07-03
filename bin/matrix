@@ -1,0 +1,8 @@
+#!/bin/bash
+# Starting point for the Matrix
+
+if [[ "$1" == "--debug" ]] ; then
+    exec python -m matrix.cli "$@"
+fi
+
+exec python -O -m matrix.cli "$@"
