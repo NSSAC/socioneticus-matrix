@@ -177,25 +177,35 @@ $ matrix dummyagent start -n node1 -p 16001 -s ~/matrixsim/events.db -i 2 -m 10
 
 Wait for the simulation to finish.
 All processes except for the RabbitMQ server should exit gracefully.
-To stop the RabbitMQ process, use hit Ctrl-C on the terminal
+To stop the RabbitMQ process hit Ctrl-C on the terminal
 running RabbitMQ.
 
-## The Matrix Dummy Agent Demo Code
+## Developing new agents and stores
+
+The Matrix source tarball contains
+the dummyagent and dummystore implementations.
+These are there to serve as templates for developers
+for developing new agents and state store implementations,
+and also for testing the Matrix.
 
 The code in matrix/dummyagent.py file should serve as a template
-on how to write cognitive agent codes.
-The code of in the file is fairly standalone.
-The agent_main function is where the execution starts.
+on how to write cognitive agent codes,
+while the code in matrix/dummystore.py file should serve as a template
+on how to write state store modules.
+The code of in these files are fairly standalone.
 
 Development of full cognitive agents should be done
 outside of the matrix source directory.
-However, it is recommended that the agents use the same command line options
-as the dummyagent command.
+To use dummyagent as a template,
+make a copy of dummyagent.py in your development directory,
+rename it to reflect the name of your agent process,
+and continue working on it as you would for any other python script.
+Changes should go into this copy and not into the matrix package.
+The same is true for dummystore.py when developing new stores.
+Note your agent process code will need to define its own intialization,
+and command line argument handling,
+that is, the matrix command will not be used to invoke your agent code.
 
-## The Matrix Dummy Store Demo Code
-
-The code in matrix/dummystore.py file should serve as a template
-on how to write state store modules.
 In general the state store module must define one function *get_state_store*
 which should accept an URI identifying the state store.
 This function should return a state store object
