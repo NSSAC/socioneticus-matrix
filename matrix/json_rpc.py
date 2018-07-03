@@ -16,19 +16,24 @@ def rpc_parse(line):
 
     try:
         request = json.loads(line)
-        assert isinstance(request, dict)
-    except (ValueError, AssertionError):
-        return None, "Malformatted RPC request"
+        if not isinstance(request, dict):
+            return None, "Request object is not of type object"
+    except ValueError:
+        if __debug__:
+            log.debug(f"Failed to parse RPC request\n{line}")
+        return None, "Failed to parse RPC request"
 
     try:
-        assert request["jsonrpc"] == "2.0"
-    except (KeyError, AssertionError):
-        return request, "Incompatible RPC version: jsonrpc != 2.0"
+        if request["jsonrpc"] != "2.0":
+            return "Incompatible RPC version: jsonrpc != '2.0'"
+    except KeyError:
+        return request, "JsonRPC version missing in request"
 
     try:
-        assert isinstance(request["method"], str)
-    except (KeyError, AssertionError):
-        return request, "Method name is not a string"
+        if not isinstance(request["method"], str):
+            return request, "Method name is not a string"
+    except KeyError:
+        return request, "Method name missing in request"
 
     if "params" in request:
         if not isinstance(request["params"], (list, dict)):
