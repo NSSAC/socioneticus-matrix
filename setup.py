@@ -15,7 +15,8 @@ setup(
         "attrdict",
         "pyyaml",
         "aioamqp",
-        "blessings"
+        "blessings",
+        "pypb-logbook_misc",
     ],
 
     description="An modeling framework for social agent simuation.",

@@ -4,7 +4,6 @@ Matrix: CLI Interface
 
 import sys
 import configparser
-from functools import partial
 
 import yaml
 import click
@@ -12,9 +11,9 @@ from attrdict import AttrDict
 from blessings import Terminal
 import logbook
 from logbook.compat import redirect_logging
+from pypb.logbook_misc import ColorLogFormatter, ChannelFilterHandler
 
 from . import parse_config
-from .logbook_utils import log_formatter, ChannelFilterHandler
 
 from .controller import main_controller
 from .eventlog import main_eventlog
@@ -45,11 +44,11 @@ def cli(ctx, debug, logtostderr):
     if logtostderr:
         if debug:
             handler = logbook.StderrHandler(logbook.DEBUG)
-            handler.formatter = partial(log_formatter, cfg.terminal)
+            handler.formatter = ColorLogFormatter(cfg.terminal)
             handler.push_application()
         else:
             handler = logbook.StderrHandler(logbook.INFO)
-            handler.formatter = partial(log_formatter, cfg.terminal)
+            handler.formatter = ColorLogFormatter(cfg.terminal)
             handler.push_application()
             ChannelFilterHandler(["aioamqp.protocol"]).push_application()
 
