@@ -2,6 +2,8 @@ from setuptools import setup
 
 setup(
     name="Matrix",
+    maintainer="Parantapa Bhattacharya",
+    maintainer_email="paran@vt.edu",
 
     packages=["matrix"],
     scripts=["bin/matrix"],
@@ -20,4 +22,5 @@ setup(
     ],
 
     description="An modeling framework for social agent simuation.",
+    url="https://ndsslgit.vbi.vt.edu/social-sim-darpa/matrix",
 )
