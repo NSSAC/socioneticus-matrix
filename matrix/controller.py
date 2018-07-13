@@ -8,6 +8,8 @@ import json
 import random
 import asyncio
 import importlib
+import signal
+from functools import partial
 
 import logbook
 import aioamqp
@@ -17,9 +19,25 @@ from matrix.json_rpc import rpc_dispatch
 log = logbook.Logger(__name__)
 
 BUFSIZE = 16 * 2 ** 30
+RECEIVED_TERM = False
 
 def randint():
     return random.randint(0, 2 ** 32 - 1)
+
+def term_handler(signame, loop):
+    """
+    Signal handler for term signals.
+    """
+
+    global RECEIVED_TERM
+
+    log.info(f"Received {signame}")
+
+    if not RECEIVED_TERM:
+        loop.stop()
+        RECEIVED_TERM = True
+    else:
+        log.info("Already stopping; ignoring signal ...")
 
 class StateStoreWrapper:
     """
@@ -290,6 +308,11 @@ async def do_startup(config, nodename, state_store, loop):
 
     controller = Controller(config, nodename, state_store, snd_chan, loop)
 
+    for signame in ["SIGINT", "SIGTERM", "SIGHUP"]:
+        signum = getattr(signal, signame)
+        handler = partial(term_handler, signame=signame, loop=loop)
+        loop.add_signal_handler(signum, handler)
+
     log.info("Setting up AMQP receiver ...")
     await make_receiver_queue(controller.handle_broker_message, rcv_chan, config, nodename)
 
@@ -337,6 +360,8 @@ def main_controller(config, nodename):
 
     resources = loop.run_until_complete(do_startup(config, nodename, state_store, loop))
     loop.run_forever()
+
+    log.info("Running cleaunup tasks ...")
     loop.run_until_complete(do_cleanup(*resources))
 
     pending_tasks = asyncio.Task.all_tasks()

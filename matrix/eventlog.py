@@ -5,10 +5,16 @@ Matrix: Event log writer.
 import gzip
 import json
 import asyncio
+import signal
+from functools import partial
 
 import logbook
 
-from .controller import make_amqp_channel, make_receiver_queue
+from .controller import (
+    make_amqp_channel,
+    make_receiver_queue,
+    term_handler
+)
 
 log = logbook.Logger(__name__)
 
@@ -58,7 +64,7 @@ class EventLogger:
         self.num_cp_finished = 0
 
         if self.is_sim_end():
-            self.event_fobj.close()
+            # self.event_fobj.close()
             self.event_loop.stop()
 
     async def handle_broker_message(self, channel, body, envelope, _properties):
@@ -88,6 +94,11 @@ async def do_startup(config, output_fname, event_loop):
 
     logger = EventLogger(config, output_fname, event_loop)
 
+    for signame in ["SIGINT", "SIGTERM", "SIGHUP"]:
+        signum = getattr(signal, signame)
+        handler = partial(term_handler, signame=signame, loop=event_loop)
+        event_loop.add_signal_handler(signum, handler)
+
     log.info("Setting up AMQP receiver ...")
     await make_receiver_queue(logger.handle_broker_message, rcv_chan, config, "")
 
@@ -111,6 +122,8 @@ def main_eventlog(config, output_fname):
 
     resources = loop.run_until_complete(do_startup(config, output_fname, loop))
     loop.run_forever()
+
+    log.info("Running cleaunup tasks ...")
     loop.run_until_complete(do_cleanup(*resources))
 
     pending_tasks = asyncio.Task.all_tasks()
