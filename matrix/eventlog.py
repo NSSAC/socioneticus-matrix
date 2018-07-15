@@ -64,6 +64,11 @@ class EventLogger:
         self.num_cp_finished = 0
 
         if self.is_sim_end():
+            log.info("Simulation completed!")
+        else:
+            log.info(f"Round {self.cur_round}/{self.num_rounds} starting ...")
+
+        if self.is_sim_end():
             # self.event_fobj.close()
             self.event_loop.stop()
 
