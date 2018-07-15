@@ -1,18 +1,20 @@
 """
 Run rabbitmq.
 """
+# pylint: disable=subprocess-popen-preexec-fn
 
 import os
 import time
 import signal
 from pathlib import Path
 from subprocess import Popen
+from contextlib import contextmanager
 
 import logbook
 
 log = logbook.Logger(__name__)
 
-TERM_SIGNALS = ["SIGINT", "SIGQUIT", "SIGTERM", "SIGHUP"]
+TERM_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"]
 
 def preexecfn():
     """
@@ -22,7 +24,38 @@ def preexecfn():
     for signame in TERM_SIGNALS:
         signal.signal(getattr(signal, signame), signal.SIG_IGN)
 
-is_cleaning_up = False
+@contextmanager
+def epmd_context():
+    """
+    Epmd context manager.
+    """
+
+    log.info("Starting empd ...")
+    epmd = Popen(["epmd"], preexec_fn=preexecfn)
+    try:
+        time.sleep(1)
+        yield epmd
+    finally:
+        log.info("Shutting down epmd ...")
+        Popen(["epmd", "-kill"], preexec_fn=preexecfn).wait()
+
+        epmd.wait()
+
+@contextmanager
+def rabbitmq_context():
+    """
+    Rabbitmq context manager.
+    """
+
+    log.info("Starting rabbitmq-server ...")
+    rabbitmq = Popen(["rabbitmq-server"], preexec_fn=preexecfn)
+    try:
+        yield rabbitmq
+    finally:
+        log.info("Shutting down rabbitmq-server ...")
+        Popen(["rabbitmqctl", "shutdown"], preexec_fn=preexecfn).wait()
+
+        rabbitmq.wait()
 
 def cleanup(signame):
     """
@@ -34,18 +67,7 @@ def cleanup(signame):
         Handle the signal.
         """
 
-        global is_cleaning_up
-
         log.info(f"Received {signame}")
-        if is_cleaning_up:
-            return
-        is_cleaning_up = True
-
-        log.info("Shutting down rabbitmq-server ...")
-        Popen(["rabbitmqctl", "shutdown"], preexec_fn=preexecfn).wait()
-
-        log.info("Shutting down epmd ...")
-        Popen(["epmd", "-kill"], preexec_fn=preexecfn).wait()
 
     return do_cleanup
 
@@ -66,24 +88,19 @@ def startup(config_fname, mnesia_base, log_base, hostname, pid_fname):
     for signame in TERM_SIGNALS:
         signal.signal(getattr(signal, signame), signal.SIG_IGN)
 
-    log.info("Starting empd ...")
-    epmd = Popen(["epmd"], preexec_fn=preexecfn)
-    time.sleep(1)
+    with epmd_context():
+        with rabbitmq_context():
 
-    log.info("Starting rabbitmq-server ...")
-    rabbitmq = Popen(["rabbitmq-server"], preexec_fn=preexecfn)
+            # Writing pid to file
+            with open(pid_fname, "wt") as fobj:
+                fobj.write(str(os.getpid()))
 
-    # Setup handlers for signals
-    for signame in TERM_SIGNALS:
-        signal.signal(getattr(signal, signame), cleanup(signame))
+            # Setup handlers for signals
+            for signame in TERM_SIGNALS:
+                signal.signal(getattr(signal, signame), cleanup(signame))
 
-    # Writing pid to file
-    with open(pid_fname, "wt") as fobj:
-        fobj.write(str(os.getpid()))
-
-    log.info("Waiting for processes to finish ..")
-    for proc in [rabbitmq, epmd]:
-        proc.wait()
+            log.info("Waiting for term signal ...")
+            signal.pause()
 
 def main_rabbitmq_start(config_fname, runtime_dir, hostname):
     """
