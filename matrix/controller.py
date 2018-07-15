@@ -48,6 +48,10 @@ class StateStoreWrapper:
 
     def __init__(self, store):
         self.store = store
+        self.is_closed = False
+
+    def __del__(self):
+        self.close()
 
     def handle_events(self, events):
         try:
@@ -64,6 +68,14 @@ class StateStoreWrapper:
             sys.exit(1)
 
     def close(self):
+        """
+        Close the underlying state store.
+        """
+
+        if self.is_closed:
+            return
+        self.is_closed = True
+
         try:
             self.store.close()
         except Exception:
@@ -154,7 +166,6 @@ class Controller: # pylint: disable=too-many-instance-attributes
         # stop the event loop
         # and flush the state store
         if self.is_sim_end():
-            self.state_store.close()
             self.loop.stop()
 
     async def send_controller_finished(self):
@@ -366,8 +377,6 @@ def main_controller(config, nodename):
 
     pending_tasks = asyncio.Task.all_tasks()
     for task in pending_tasks:
-        try:
-            loop.run_until_complete(task)
-        except asyncio.CancelledError:
-            pass
+        if not task.done():
+            task.cancel()
     loop.close()
