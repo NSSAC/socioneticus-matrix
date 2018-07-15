@@ -157,6 +157,11 @@ class Controller: # pylint: disable=too-many-instance-attributes
         self.num_ap_waiting = 0
         self.num_cp_finished = 0
 
+        if self.is_sim_end():
+            log.info("Simulation completed!")
+        else:
+            log.info(f"Round {self.cur_round}/{self.num_rounds} starting ...")
+
         # Wake up all agent processes
         self.start_event.set()
         await asyncio.sleep(0)
