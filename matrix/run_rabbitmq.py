@@ -9,6 +9,7 @@ import signal
 from pathlib import Path
 from subprocess import Popen
 from contextlib import contextmanager
+import configparser
 
 import logbook
 
@@ -110,6 +111,11 @@ def main_rabbitmq_start(config_fname, runtime_dir, hostname):
     config_fname = Path(config_fname).absolute()
     runtime_dir = Path(runtime_dir).absolute()
 
+    with open(config_fname, "rt") as fobj:
+        rcfg = configparser.ConfigParser()
+        rcfg.read_string("[default]\n" + fobj.read())
+    management_port = rcfg["default"].get("management.listener.port", 15672)
+
     config_fname = config_fname.parent / config_fname.stem
     mnesia_base = runtime_dir / "mnesia"
     log_base = runtime_dir / "log"
@@ -122,6 +128,7 @@ def main_rabbitmq_start(config_fname, runtime_dir, hostname):
         log.info(f"Creating directory {log_base}")
         log_base.mkdir(mode=0o700)
 
+    log.info(f"Management UI: http://{hostname}:{management_port}")
     startup(config_fname, mnesia_base, log_base, hostname, pid_fname)
 
 def main_rabbitmq_stop(runtime_dir):
