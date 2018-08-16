@@ -72,7 +72,7 @@ def cleanup(signame):
 
     return do_cleanup
 
-def startup(config_fname, mnesia_base, log_base, hostname, pid_fname):
+def startup(config_fname, mnesia_base, log_base, hostname, rabbitmq_pid_fname, runner_pid_fname):
     """
     Start rabbitmq-server.
     """
@@ -80,6 +80,7 @@ def startup(config_fname, mnesia_base, log_base, hostname, pid_fname):
     os.environ["RABBITMQ_CONFIG_FILE"] = str(config_fname)
     os.environ["RABBITMQ_MNESIA_BASE"] = str(mnesia_base)
     os.environ["RABBITMQ_LOG_BASE"] = str(log_base)
+    os.environ["RABBITMQ_PID_FILE"] = str(rabbitmq_pid_fname)
     os.environ["HOSTNAME"] = hostname
 
     log.info("Enable managment plugins ...")
@@ -92,8 +93,18 @@ def startup(config_fname, mnesia_base, log_base, hostname, pid_fname):
     with epmd_context():
         with rabbitmq_context():
 
+            # Wait for rabbitmq process to start
+            log.info("Waiting for rabbitmq process to start ...")
+            cmd = ["rabbitmqctl", "--timeout", "120", "wait", str(rabbitmq_pid_fname)]
+            Popen(cmd, preexec_fn=preexecfn).wait()
+
+            # Health check
+            log.info("Rabbitmq process health check ...")
+            cmd = ["rabbitmqctl", "node_health_check"]
+            Popen(cmd, preexec_fn=preexecfn).wait()
+
             # Writing pid to file
-            with open(pid_fname, "wt") as fobj:
+            with open(runner_pid_fname, "wt") as fobj:
                 fobj.write(str(os.getpid()))
 
             # Setup handlers for signals
@@ -102,6 +113,12 @@ def startup(config_fname, mnesia_base, log_base, hostname, pid_fname):
 
             log.info("Waiting for term signal ...")
             signal.pause()
+            log.info("Term signal received ...")
+
+            log.info(f"Removing runner pid file: {runner_pid_fname}")
+            runner_pid_fname.unlink()
+            log.info(f"Removing rabbitmq pid file: {rabbitmq_pid_fname}")
+            rabbitmq_pid_fname.unlink()
 
 def main_rabbitmq_start(config_fname, runtime_dir, hostname):
     """
@@ -119,7 +136,8 @@ def main_rabbitmq_start(config_fname, runtime_dir, hostname):
     config_fname = config_fname.parent / config_fname.stem
     mnesia_base = runtime_dir / "mnesia"
     log_base = runtime_dir / "log"
-    pid_fname = runtime_dir / "run_rabbitmq.pid"
+    rabbitmq_pid_fname = runtime_dir / "rabbitmq.pid"
+    runner_pid_fname = runtime_dir / "run_rabbitmq.pid"
 
     if not mnesia_base.exists():
         log.info(f"Creating directory {mnesia_base}")
@@ -128,8 +146,15 @@ def main_rabbitmq_start(config_fname, runtime_dir, hostname):
         log.info(f"Creating directory {log_base}")
         log_base.mkdir(mode=0o700)
 
+    if rabbitmq_pid_fname.exists():
+        log.info(f"Removing existing rabbitmq pid file: {rabbitmq_pid_fname}")
+        rabbitmq_pid_fname.unlink()
+    if runner_pid_fname.exists():
+        log.info(f"Removing existing runner pid file: {runner_pid_fname}")
+        runner_pid_fname.unlink()
+
     log.info(f"Management UI: http://{hostname}:{management_port}")
-    startup(config_fname, mnesia_base, log_base, hostname, pid_fname)
+    startup(config_fname, mnesia_base, log_base, hostname, rabbitmq_pid_fname, runner_pid_fname)
 
 def main_rabbitmq_stop(runtime_dir):
     """
