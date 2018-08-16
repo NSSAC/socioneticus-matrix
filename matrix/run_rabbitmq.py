@@ -72,7 +72,7 @@ def cleanup(signame):
 
     return do_cleanup
 
-def startup(config_fname, mnesia_base, log_base, hostname, rabbitmq_pid_fname, runner_pid_fname):
+def startup(config_fname, mnesia_base, log_base, hostname, rabbitmq_pid_fname, runner_pid_fname, management_port):
     """
     Start rabbitmq-server.
     """
@@ -110,6 +110,8 @@ def startup(config_fname, mnesia_base, log_base, hostname, rabbitmq_pid_fname, r
             # Setup handlers for signals
             for signame in TERM_SIGNALS:
                 signal.signal(getattr(signal, signame), cleanup(signame))
+
+            log.info(f"Management UI: http://{hostname}:{management_port}")
 
             log.info("Waiting for term signal ...")
             signal.pause()
@@ -153,8 +155,7 @@ def main_rabbitmq_start(config_fname, runtime_dir, hostname):
         log.info(f"Removing existing runner pid file: {runner_pid_fname}")
         runner_pid_fname.unlink()
 
-    log.info(f"Management UI: http://{hostname}:{management_port}")
-    startup(config_fname, mnesia_base, log_base, hostname, rabbitmq_pid_fname, runner_pid_fname)
+    startup(config_fname, mnesia_base, log_base, hostname, rabbitmq_pid_fname, runner_pid_fname, management_port)
 
 def main_rabbitmq_stop(runtime_dir):
     """
