@@ -11,7 +11,7 @@ from attrdict import AttrDict
 from blessings import Terminal
 import logbook
 from logbook.compat import redirect_logging
-from qz7.logbook_misc import ColorLogFormatter, ChannelFilterHandler
+from qz7.logbook import ColorLogFormatter, ChannelFilterHandler
 
 from . import parse_config
 

@@ -18,7 +18,7 @@ setup(
         "pyyaml",
         "aioamqp",
         "blessings",
-        "qz7-logbook_misc",
+        "qz7-logbook",
     ],
 
     description="An modeling framework for social agent simuation.",
