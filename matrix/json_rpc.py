@@ -2,8 +2,10 @@
 Methods to implement jsonrpc over asyncio.
 """
 # pylint: disable=broad-except
+# pylint: disable=too-many-return-statements
 
 import json
+from uuid import uuid4
 
 import logbook
 
@@ -56,6 +58,26 @@ def rpc_error(message, request=None):
 
     return json.dumps(response)
 
+def rpc_request(method, id=None, **params): # pylint: disable=redefined-builtin
+    """
+    Generate the rpc request message.
+    """
+
+    request = {
+        "jsonrpc": "2.0",
+        "method": method,
+        "params": params
+    }
+
+    if id is None:
+        request["id"] = str(uuid4())
+    elif id is False:
+        pass
+    else:
+        request["id"] = str(id)
+
+    return request
+
 def rpc_response(result, request):
     """
     Generate the response message.
@@ -70,9 +92,9 @@ def rpc_response(result, request):
         "id": request["id"]
     }
 
-    return json.dumps(response)
+    return response
 
-async def rpc_dispatch(method_map, async_method_map, line):
+async def rpc_dispatch(method_map, line):
     """
     Dispatch the proper method.
     """
@@ -82,7 +104,7 @@ async def rpc_dispatch(method_map, async_method_map, line):
         return rpc_error(error, request)
 
     method = request["method"]
-    if method not in method_map and method not in async_method_map:
+    if method not in method_map:
         return rpc_error("Unknown RPC method", request)
 
     if "params" in request:
@@ -94,17 +116,10 @@ async def rpc_dispatch(method_map, async_method_map, line):
     else:
         args, kwargs = [], {}
 
-    if method in method_map:
-        try:
-            response = method_map[method](*args, **kwargs)
-        except Exception as e:
-            log.exception(f"Error dispatching {method}")
-            return rpc_error(e, request)
-    else: # method in async_method_map:
-        try:
-            response = await async_method_map[method](*args, **kwargs)
-        except Exception as e:
-            log.exception(f"Error dispatching {method}")
-            return rpc_error(e, request)
+    try:
+        response = await method_map[method](*args, **kwargs)
+    except Exception as e:
+        log.exception(f"Error dispatching {method}")
+        return rpc_error(e, request)
 
     return rpc_response(response, request)

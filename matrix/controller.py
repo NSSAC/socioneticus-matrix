@@ -14,7 +14,7 @@ from functools import partial
 import logbook
 import aioamqp
 
-from matrix.json_rpc import rpc_dispatch
+from .json_rpc import rpc_dispatch, rpc_request
 
 log = logbook.Logger(__name__)
 
@@ -87,7 +87,9 @@ class Controller: # pylint: disable=too-many-instance-attributes
     Controller object.
     """
 
-    def __init__(self, config, nodename, state_store, snd_chan, loop):
+    def __init__(self, config, nodename, state_store, loop):
+        self.nodename = nodename
+
         self.num_controllers = len(config.sim_nodes)
         self.num_agentprocs = config.num_agentprocs[nodename]
         self.num_rounds = config.num_rounds
@@ -106,11 +108,6 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
         self.state_store = StateStoreWrapper(state_store)
 
-        # Info needed to send messages to the broker
-        self.snd_chan = snd_chan
-        self.event_exchange = config.event_exchange
-        self.nodename = nodename
-
         # The event loop
         self.loop = loop
 
@@ -121,27 +118,65 @@ class Controller: # pylint: disable=too-many-instance-attributes
         self.num_cp_finished = 0
         self.start_event = asyncio.Event()
 
-    def is_sim_end(self):
+        # These attributes will be populated later
+        # These should be bound to async functions
+        # That can be used to send messages to the backend
+        self.share_events = None
+        self.send_controller_finished = None
+
+    async def get_agentproc_seed(self, agentproc_id):
         """
-        Has the simulation ended.
+        RPC method: Used by agent processes to retrive random seed.
+
+        agentproc_id: ID of the agent process [1, num_agentprocs on this node]
         """
 
-        return self.cur_round == self.num_rounds + 1
+        return self.agentproc_seeds[agentproc_id -1]
 
-    async def agent_process_waiting(self):
+    async def can_we_start_yet(self):
         """
-        Update state when a agent process is waiting.
+        RPC method: Used by agent process to wait for start of current round.
         """
 
         self.num_ap_waiting += 1
         log.info(f"{self.num_ap_waiting}/{self.num_agentprocs} agent processes are waiting ...")
         if self.num_ap_waiting == self.num_agentprocs:
-            await self.send_controller_finished()
+            await self.send_controller_finished(self.nodename)
         await self.start_event.wait()
 
-    async def controller_process_finished(self):
+        if self.is_sim_end():
+            return { "cur_round": -1, "start_time": -1, "end_time": -1 }
+
+        return {
+            "cur_round": self.cur_round,
+            "start_time": int(self.start_time + self.round_time * (self.cur_round - 1)),
+            "end_time": int(self.start_time + self.round_time * self.cur_round)
+        }
+
+    async def register_events(self, events):
         """
-        Update state when a controller reports that all its agents have finished.
+        RPC method: Used by agent processes to hand over generated events.
+
+        events: list of events.
+        """
+
+        await self.share_events(self.nodename, events)
+        return True
+
+    async def store_events(self, nodename, events):
+        """
+        RPC method: Used by other controllers to hand over events from their local node.
+
+        events: list of events.
+        """
+
+        self.state_store.handle_events(events)
+
+    async def controller_finished(self, nodename):
+        """
+        RPC method: Used by other controllers to signal they have finished.
+
+        nodename: nodename of the finished controller.
         """
 
         self.num_cp_finished += 1
@@ -173,110 +208,109 @@ class Controller: # pylint: disable=too-many-instance-attributes
         if self.is_sim_end():
             self.loop.stop()
 
-    async def send_controller_finished(self):
+    def is_sim_end(self):
         """
-        Send message to other controllers that all our agents have finished.
-        """
-
-        message = json.dumps(None).encode("utf-8")
-        await self.snd_chan.basic_publish(message,
-                                          exchange_name=self.event_exchange,
-                                          routing_key=self.nodename)
-    async def can_we_start_yet(self):
-        """
-        RPC method, returns when agent process to allowed to begin executing current round.
+        Has the simulation ended.
         """
 
-        await self.agent_process_waiting()
+        return self.cur_round == self.num_rounds + 1
 
-        if self.is_sim_end():
-            return { "cur_round": -1, "start_time": -1, "end_time": -1 }
-
-        return {
-            "cur_round": self.cur_round,
-            "start_time": int(self.start_time + self.round_time * (self.cur_round - 1)),
-            "end_time": int(self.start_time + self.round_time * self.cur_round)
-        }
-
-    async def register_events(self, events):
+    async def dispatch(self, message):
         """
-        RPC method, used by agent processes to hand over generated events to the system.
-
-        events: list of events.
-        """
-
-        message = json.dumps(events).encode("utf-8")
-        await self.snd_chan.basic_publish(message,
-                                          exchange_name=self.event_exchange,
-                                          routing_key=self.nodename)
-        return True
-
-
-    def get_agentproc_seed(self, agentproc_id):
-        """
-        RPC method, used by agent processes to retrive random seed.
-
-        agentproc_id: ID of the agent process (starts at 1)
-        """
-
-        return self.agentproc_seeds[agentproc_id -1]
-
-    async def handle_broker_message(self, channel, body, envelope, _properties):
-        """
-        Callback handler, for messages from amqp broker.
-
-        channel: channel from which message was received
-        body: bytes object body of the message.
-        envelope: envelope
-        _properties: properties
-        """
-
-        events = json.loads(body.decode("utf-8"))
-        if events is None:
-            await self.controller_process_finished()
-        else:
-            self.state_store.handle_events(events)
-
-        # Send acknolegement back to server
-        await channel.basic_client_ack(delivery_tag=envelope.delivery_tag)
-
-    async def handle_agent_process(self, reader, writer):
-        """
-        Callback handler, for new tcp connections from agents.
-
-        reader: async stream reader object
-        writer: async stream writer object
+        Dispatch a rpc method call.
         """
 
         method_map = {
-            "get_agentproc_seed": self.get_agentproc_seed
-        }
-
-        async_method_map = {
+            # RPC methods used by agent processes
+            "get_agentproc_seed": self.get_agentproc_seed,
+            "can_we_start_yet": self.can_we_start_yet,
             "register_events": self.register_events,
-            "can_we_start_yet": self.can_we_start_yet
+
+            # RPC methods used by other contollers
+            "store_events": self.store_events,
+            "controller_finished": self.controller_finished
         }
 
-        address = writer.get_extra_info('peername')
-        address_str = ":".join(map(str, address))
-        log.info(f"New connection from {address_str}")
+        response = await rpc_dispatch(method_map, message)
+        return response
 
-        while True:
-            line = await reader.readline()
-            if not line:
-                break
-            line = line.decode("ascii")
+async def handle_agent_process(controller, reader, writer):
+    """
+    Callback handler, for new tcp connections from agents.
 
-            response = await rpc_dispatch(method_map, async_method_map, line)
-            if response is None:
-                continue
+    reader: async stream reader object
+    writer: async stream writer object
+    """
 
-            response = response + "\n" # The newline important
-            response = response.encode("ascii")
-            writer.write(response)
-            await writer.drain()
+    address = writer.get_extra_info('peername')
+    address_str = ":".join(map(str, address))
+    log.info(f"New connection from {address_str}")
 
-        log.info(f"{address_str} disconnected")
+    while True:
+        line = await reader.readline()
+        if not line:
+            break
+        line = line.decode("ascii")
+
+        response = await controller.dispatch(line)
+        assert response is not None
+
+        response = json.dumps(response) + "\n" # NOTE: The newline important
+        response = response.encode("ascii")
+
+        writer.write(response)
+        await writer.drain()
+
+    log.info(f"{address_str} disconnected")
+
+async def handle_broker_message(controller, channel, body, envelope, _properties):
+    """
+    Callback handler, for messages from amqp broker.
+
+    controller  : the controller object.
+    channel     : channel from which message was received
+    body        : bytes object body of the message.
+    envelope    : envelope
+    _properties : properties
+    """
+
+    body = body.decode("utf-8")
+
+    response = await controller.dispatch(body)
+    assert response is None
+
+    # Send ack back to server
+    await channel.basic_client_ack(delivery_tag=envelope.delivery_tag)
+
+
+async def share_events(nodename, events, chan, exchange_name):
+    """
+    Share the events with other controllers.
+    """
+
+    request = rpc_request("store_events", id=False,
+                          nodename=nodename,
+                          events=events)
+    request = json.dumps(request)
+    request = request.encode("utf-8")
+
+    await chan.basic_publish(request,
+                             exchange_name=exchange_name,
+                             routing_key=nodename)
+
+async def send_controller_finished(nodename, chan, exchange_name):
+    """
+    Signal other controllers that this one has finished.
+    """
+
+    request = rpc_request("controller_finished", id=False,
+                          nodename=nodename)
+    request = json.dumps(request)
+    request = request.encode("utf-8")
+
+    await chan.basic_publish(request,
+                             exchange_name=exchange_name,
+                             routing_key=nodename)
 
 async def make_amqp_channel(config):
     """
@@ -322,7 +356,13 @@ async def do_startup(config, nodename, state_store, loop):
     log.info("Setting up event exchange ...")
     await snd_chan.exchange_declare(exchange_name=config.event_exchange, type_name='fanout')
 
-    controller = Controller(config, nodename, state_store, snd_chan, loop)
+    controller = Controller(config, nodename, state_store, loop)
+    controller.share_events = partial(share_events,
+                                      chan=snd_chan,
+                                      exchange_name=config.event_exchange)
+    controller.send_controller_finished = partial(send_controller_finished,
+                                                  chan=snd_chan,
+                                                  exchange_name=config.event_exchange)
 
     for signame in ["SIGINT", "SIGTERM", "SIGHUP"]:
         signum = getattr(signal, signame)
@@ -330,10 +370,12 @@ async def do_startup(config, nodename, state_store, loop):
         loop.add_signal_handler(signum, handler)
 
     log.info("Setting up AMQP receiver ...")
-    await make_receiver_queue(controller.handle_broker_message, rcv_chan, config, nodename)
+    bm_callback = partial(handle_broker_message, controller)
+    await make_receiver_queue(bm_callback, rcv_chan, config, nodename)
 
     log.info(f"Starting local TCP server at 127.0.0.1:{port} ..." )
-    server = await asyncio.start_server(controller.handle_agent_process, "127.0.0.1", port, limit=BUFSIZE)
+    tcon_callback = partial(handle_agent_process, controller)
+    server = await asyncio.start_server(tcon_callback, "127.0.0.1", port, limit=BUFSIZE)
 
     return server, snd_trans, snd_proto, rcv_trans, rcv_proto
 

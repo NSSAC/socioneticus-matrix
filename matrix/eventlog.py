@@ -13,8 +13,10 @@ import logbook
 from .controller import (
     make_amqp_channel,
     make_receiver_queue,
-    term_handler
+    term_handler,
+    handle_broker_message
 )
+from .json_rpc import rpc_dispatch
 
 log = logbook.Logger(__name__)
 
@@ -33,25 +35,22 @@ class EventLogger:
         self.cur_round = 0
         self.num_cp_finished = 0
 
-    def is_sim_end(self):
+    async def store_events(self, nodename, events):
         """
-        Has the simulation ended.
-        """
+        RPC method: Used by other controllers to hand over events from their local node.
 
-        return self.cur_round == self.num_rounds + 1
-
-    def handle_events(self, events):
-        """
-        Handle events.
+        events: list of events.
         """
 
         for event in events:
             event = json.dumps(event)
             self.event_fobj.write(event + "\n")
 
-    async def controller_process_finished(self):
+    async def controller_finished(self, nodename):
         """
-        Update state when a controller reports that all its agents have finished.
+        RPC method: Used by other controllers to signal they have finished.
+
+        nodename: nodename of the finished controller.
         """
 
         self.num_cp_finished += 1
@@ -72,19 +71,26 @@ class EventLogger:
             # self.event_fobj.close()
             self.event_loop.stop()
 
-    async def handle_broker_message(self, channel, body, envelope, _properties):
+    def is_sim_end(self):
         """
-        Callback handler, for messages from amqp broker.
+        Has the simulation ended.
         """
 
-        events = json.loads(body.decode("utf-8"))
-        if events is None:
-            await self.controller_process_finished()
-        else:
-            self.handle_events(events)
+        return self.cur_round == self.num_rounds + 1
 
-        # Send acknolegement back to server
-        await channel.basic_client_ack(delivery_tag=envelope.delivery_tag)
+    async def dispatch(self, message):
+        """
+        Dispatch a rpc method call.
+        """
+
+        method_map = {
+            # RPC methods used by other contollers
+            "store_events": self.store_events,
+            "controller_finished": self.controller_finished
+        }
+
+        response = await rpc_dispatch(method_map, message)
+        return response
 
 async def do_startup(config, output_fname, event_loop):
     """
@@ -105,7 +111,8 @@ async def do_startup(config, output_fname, event_loop):
         event_loop.add_signal_handler(signum, handler)
 
     log.info("Setting up AMQP receiver ...")
-    await make_receiver_queue(logger.handle_broker_message, rcv_chan, config, "")
+    bm_callback = partial(handle_broker_message, logger)
+    await make_receiver_queue(bm_callback, rcv_chan, config, "")
 
     return rcv_trans, rcv_proto
 
