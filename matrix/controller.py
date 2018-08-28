@@ -13,6 +13,7 @@ from functools import partial
 
 import logbook
 import aioamqp
+from more_itertools import sliced
 
 from .json_rpc import rpc_dispatch, rpc_request
 
@@ -20,6 +21,7 @@ log = logbook.Logger(__name__)
 
 BUFSIZE = 16 * 2 ** 30
 RECEIVED_TERM = False
+EVENT_CHUNKSIZE = 1000
 
 def randint():
     return random.randint(0, 2 ** 32 - 1)
@@ -160,7 +162,8 @@ class Controller: # pylint: disable=too-many-instance-attributes
         events: list of events.
         """
 
-        await self.share_events(self.nodename, events)
+        for event_chunk in sliced(events, EVENT_CHUNKSIZE):
+            await self.share_events(self.nodename, event_chunk)
         return True
 
     async def store_events(self, nodename, events):
