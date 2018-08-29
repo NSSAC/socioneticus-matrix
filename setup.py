@@ -6,7 +6,7 @@ setup(
     maintainer_email="paran@vt.edu",
 
     packages=["matrix"],
-    scripts=["bin/matrix"],
+    scripts=["bin/matrix", "bin/bluepill"],
 
     use_scm_version=True,
     setup_requires=['setuptools_scm'],

@@ -1,5 +1,5 @@
 """
-Test the matrix controller with the dummy agents.
+Test the matrix controller with the bluepill agents.
 """
 # pylint: disable=redefined-outer-name
 
@@ -17,7 +17,7 @@ rabbitmq_password: user
 event_exchange: events
 
 root_seed: 42
-state_store_module: matrix.dummystore
+state_store_module: matrix.client.bluepill_store
 num_rounds: 10
 start_time: 2018-06-01
 round_time: 1h
@@ -39,7 +39,7 @@ def assert_equal_event_tables(dsn1, dsn2):
 
     assert rows1 == rows2
 
-def do_test_dummy(tempdir, popener, num_nodes, num_agentproc_range):
+def do_test_bluepill(tempdir, popener, num_nodes, num_agentproc_range):
     """
     Do the tests.
     """
@@ -62,7 +62,7 @@ def do_test_dummy(tempdir, popener, num_nodes, num_agentproc_range):
     # Initialize all the event stores
     for node in cfg["sim_nodes"]:
         state_dsn = cfg["state_dsn"][node]
-        cmd = f"matrix dummyagent storeinit -s {state_dsn}"
+        cmd = f"bluepill store init -s {state_dsn}"
         assert popener(cmd, shell=True, output_prefix=f"storeinit-{node}").wait() == 0
 
     all_procs = []
@@ -88,9 +88,9 @@ def do_test_dummy(tempdir, popener, num_nodes, num_agentproc_range):
         num_agentprocs = cfg["num_agentprocs"][node]
 
         for agentproc_id in range(1, num_agentprocs + 1):
-            # Start dummyagent process
-            cmd = f"matrix dummyagent start -n {node} -p {port} -s {state_dsn} -i {agentproc_id}"
-            agentproc = popener(cmd, shell=True, output_prefix=f"dummyagent-{node}-{agentproc_id}")
+            # Start bluepill agent process
+            cmd = f"bluepill agent start -n {node} -p {port} -s {state_dsn} -i {agentproc_id}"
+            agentproc = popener(cmd, shell=True, output_prefix=f"bluepill-{node}-{agentproc_id}")
             all_procs.append(agentproc)
 
     # Wait for the processes to finish
@@ -108,7 +108,7 @@ def do_test_dummy(tempdir, popener, num_nodes, num_agentproc_range):
         for rest_state_dsn in rest_state_dsns:
             assert_equal_event_tables(first_state_dsn, rest_state_dsn)
 
-def test_dummy1(tempdir, popener):
+def test_bluepill1(tempdir, popener):
     """
     Test the basic overall run with one agent.
     """
@@ -116,9 +116,9 @@ def test_dummy1(tempdir, popener):
     num_nodes = 1
     num_agentproc_range = 1, 1
 
-    do_test_dummy(tempdir, popener, num_nodes, num_agentproc_range)
+    do_test_bluepill(tempdir, popener, num_nodes, num_agentproc_range)
 
-def test_dummy7(tempdir, popener):
+def test_bluepill17(tempdir, popener):
     """
     Test the basic overall run with one agent.
     """
@@ -126,4 +126,4 @@ def test_dummy7(tempdir, popener):
     num_nodes = 7
     num_agentproc_range = 10, 20
 
-    do_test_dummy(tempdir, popener, num_nodes, num_agentproc_range)
+    do_test_bluepill(tempdir, popener, num_nodes, num_agentproc_range)

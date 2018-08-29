@@ -1,5 +1,5 @@
 """
-Dummy state store module.
+BluePill state store module.
 
 This module serves as an example interface
 for building state store modules
@@ -12,7 +12,7 @@ def event_sort_key(event):
     agent_id, _, cur_time, round_num = event
     return round_num, cur_time, agent_id
 
-class DummyStore:
+class BluePillStore:
     """
     Class for storing stuff.
     """
@@ -56,7 +56,7 @@ class DummyStore:
         self.con.close()
 
     # The following methods are used internally
-    # by the dummystore implementation
+    # by the bluepill store implementation
     # and the are not visible to the matrix.
 
     def initialize(self):
@@ -79,7 +79,7 @@ class DummyStore:
         """
         Get the last known state of the agent.
 
-        This method is used by dummyagent
+        This method is used by bluepill agent
         and is not called by the controller.
         """
 
@@ -102,15 +102,15 @@ class DummyStore:
 # is mandatory as this is how the matrix
 # creates the state store object.
 def get_state_store(state_dsn):
-    return DummyStore(state_dsn)
+    return BluePillStore(state_dsn)
 
-def main_dummystoreinit(**kwargs):
+def main_store_init(**kwargs):
     """
     Initialize the datastore.
     """
 
     state_dsn = kwargs.pop("state_dsn")
 
-    store = DummyStore(state_dsn)
+    store = BluePillStore(state_dsn)
     store.initialize()
     store.close()

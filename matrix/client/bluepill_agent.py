@@ -1,14 +1,13 @@
 """
-Matrix: Dummy agent process.
-
+The BluePill agent process.
 """
 
 import random
 
 import logbook
 
-from .agent_common import RPCProxy
-from .dummystore import get_state_store
+from .rpcproxy import RPCProxy
+from .bluepill_store import get_state_store
 
 log = logbook.Logger(__name__)
 
@@ -37,9 +36,9 @@ def do_something(nodename, agentproc_id, num_agents, state_store, round_info):
 
     return events
 
-def main_dummyagent(**kwargs):
+def main_agent(**kwargs):
     """
-    Dummy agent process
+    BluePill agent process
 
     Agent Logic:
         Run num_agents, which cycle betweem states rock, paper, and scissors.

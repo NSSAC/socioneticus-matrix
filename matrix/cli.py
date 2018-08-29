@@ -17,8 +17,6 @@ from . import parse_config
 
 from .controller import main_controller
 from .eventlog import main_eventlog
-from .dummyagent import main_dummyagent
-from .dummystore import main_dummystoreinit
 from .run_rabbitmq import main_rabbitmq_start, main_rabbitmq_stop
 
 log = logbook.Logger(__name__)
@@ -89,52 +87,6 @@ def eventlog(config, output):
     cfg = parse_config(config)
     return main_eventlog(cfg, output)
 
-@cli.group()
-def dummyagent():
-    """
-    Run/initialize dummyagent.
-    """
-
-    pass
-
-@dummyagent.command("storeinit")
-@click.option("-s", "--state-dsn",
-              required=True,
-              type=click.Path(dir_okay=False, writable=True),
-              help="System state data source name")
-def dummyagent_storeinit(**kwargs):
-    """
-    Initialize the dummystore database.
-    """
-
-    main_dummystoreinit(**kwargs)
-
-@dummyagent.command("start")
-@click.option("-n", "--ctrl-node",
-              required=True,
-              type=str,
-              help="Controller node name")
-@click.option("-p", "--ctrl-port",
-              required=True,
-              type=int,
-              help="Controller port")
-@click.option("-s", "--state-dsn",
-              required=True,
-              type=click.Path(exists=True, dir_okay=False, writable=True),
-              help="System state data source name")
-@click.option("-i", "--agentproc-id",
-              required=True,
-              type=int,
-              help="Agent process id")
-@click.option("-m", "--num-agents",
-              default=1,
-              help="Number of agents this process simulates")
-def dummyagent_start(**kwargs):
-    """
-    Start a dummyagent process.
-    """
-
-    return main_dummyagent(**kwargs)
 
 @cli.group()
 def rabbitmq():
@@ -240,7 +192,7 @@ def updateconfig_nodes(controller_port, num_agentprocs, state_dsn, controller_co
     Add node specific stuff to controller configuration.
     """
 
-    if len(nodes) < 1:
+    if not nodes:
         log.error("Need at-least one node name for updating configuration.")
         sys.exit(1)
 
