@@ -118,7 +118,9 @@ class Controller: # pylint: disable=too-many-instance-attributes
         self.cur_round = 0
         self.num_ap_waiting = 0
         self.num_cp_finished = 0
-        self.start_event = asyncio.Event()
+
+        # Agent process queue
+        self.ap_queue = asyncio.Queue(maxsize=self.num_agentprocs, loop=loop)
 
         # These attributes will be populated later
         # These should be bound to async functions
@@ -144,7 +146,9 @@ class Controller: # pylint: disable=too-many-instance-attributes
         log.info(f"{self.num_ap_waiting}/{self.num_agentprocs} agent processes are waiting ...")
         if self.num_ap_waiting == self.num_agentprocs:
             await self.send_controller_finished(self.nodename)
-        await self.start_event.wait()
+
+        await self.ap_queue.get()
+        self.ap_queue.task_done()
 
         if self.is_sim_end():
             return { "cur_round": -1, "start_time": -1, "end_time": -1 }
@@ -200,10 +204,8 @@ class Controller: # pylint: disable=too-many-instance-attributes
         else:
             log.info(f"Round {self.cur_round}/{self.num_rounds} starting ...")
 
-        # Wake up all agent processes
-        self.start_event.set()
-        await asyncio.sleep(0)
-        self.start_event.clear()
+        for _ in range(self.num_agentprocs):
+            await self.ap_queue.put(None)
 
         # If simulation has ended
         # stop the event loop

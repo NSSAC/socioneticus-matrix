@@ -118,7 +118,7 @@ def test_bluepill1(tempdir, popener):
 
     do_test_bluepill(tempdir, popener, num_nodes, num_agentproc_range)
 
-def test_bluepill17(tempdir, popener):
+def test_bluepill7(tempdir, popener):
     """
     Test the basic overall run with one agent.
     """
