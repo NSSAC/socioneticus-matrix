@@ -95,8 +95,6 @@ class Controller: # pylint: disable=too-many-instance-attributes
         self.num_controllers = len(config.sim_nodes)
         self.num_agentprocs = config.num_agentprocs[nodename]
         self.num_rounds = config.num_rounds
-        self.start_time = config.start_time
-        self.round_time = config.round_time
 
         # Generate the seed for the current controller
         random.seed(config.root_seed, version=2)
@@ -151,13 +149,9 @@ class Controller: # pylint: disable=too-many-instance-attributes
         self.ap_queue.task_done()
 
         if self.is_sim_end():
-            return { "cur_round": -1, "start_time": -1, "end_time": -1 }
+            return { "cur_round": -1 }
 
-        return {
-            "cur_round": self.cur_round,
-            "start_time": int(self.start_time + self.round_time * (self.cur_round - 1)),
-            "end_time": int(self.start_time + self.round_time * self.cur_round)
-        }
+        return { "cur_round": self.cur_round }
 
     async def register_events(self, events):
         """

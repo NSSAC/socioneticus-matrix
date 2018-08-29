@@ -22,36 +22,6 @@ INTERVAL_SUFFIXES = { "s": 1, "m": 60, "h": 3600, "d": 86400 }
 
 log = logbook.Logger(__name__)
 
-def parse_timestamp(dt):
-    """
-    Parse timestamp from date.
-    """
-
-    if not isinstance(dt, date):
-        log.error(f"Invalid date '{dt}'")
-        sys.exit(1)
-
-    ts = datetime(dt.year, dt.month, dt.day)
-    ts = ts.utctimetuple()
-    ts = timegm(ts)
-    return ts
-
-def parse_interval(text):
-    """
-    Parse interval from text.
-    """
-
-    parts = text.split()
-    interval = 0
-    for part in parts:
-        x, suffix = part[:-1], part[-1]
-        try:
-            interval += int(x) * INTERVAL_SUFFIXES[suffix]
-        except (ValueError, KeyError):
-            log.error(f"Invalid interval '{text}'")
-            sys.exit(1)
-    return interval
-
 def parse_config(config_fname, nodename=None):
     """
     Parse the matrix controller configuration file.
@@ -81,7 +51,5 @@ def parse_config(config_fname, nodename=None):
         sys.exit(1)
 
     cfg.state_dsn = {k: os.path.expandvars(v) for k, v in cfg.state_dsn.items()}
-    cfg.start_time = parse_timestamp(cfg.start_time)
-    cfg.round_time = parse_interval(cfg.round_time)
 
     return cfg

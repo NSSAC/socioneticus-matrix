@@ -19,8 +19,6 @@ event_exchange: events
 root_seed: 42
 state_store_module: matrix.client.bluepill_store
 num_rounds: 10
-start_time: 2018-06-01
-round_time: 1h
 """
 
 def assert_equal_event_tables(dsn1, dsn2):

@@ -9,8 +9,8 @@ that play well with the controller.
 import sqlite3
 
 def event_sort_key(event):
-    agent_id, _, cur_time, round_num = event
-    return round_num, cur_time, agent_id
+    agent_id, _, round_num = event
+    return round_num, agent_id
 
 class BluePillStore:
     """
@@ -45,7 +45,7 @@ class BluePillStore:
 
         with self.con:
             cur = self.con.cursor()
-            sql = "insert into event values (?,?,?,?)"
+            sql = "insert into event values (?,?,?)"
             for event in self.event_cache:
                 cur.execute(sql, event)
 
@@ -68,7 +68,6 @@ class BluePillStore:
         create table if not exists event (
             agent_id     text,
             state        text,
-            cur_time     bigint,
             round_num    bigint
         )
         """

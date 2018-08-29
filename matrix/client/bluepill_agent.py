@@ -29,9 +29,7 @@ def do_something(nodename, agentproc_id, num_agents, state_store, round_info):
             "scissors": "rock"
         }[prev_state]
 
-        cur_time = random.randint(round_info["start_time"], round_info["end_time"] - 1)
-
-        event = [agent_id, cur_state, cur_time, round_info["cur_round"]]
+        event = [agent_id, cur_state, round_info["cur_round"]]
         events.append(event)
 
     return events
