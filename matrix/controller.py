@@ -3,11 +3,9 @@ Matrix: Controller
 """
 # pylint: disable=broad-except
 
-import sys
 import json
 import random
 import asyncio
-import importlib
 import signal
 from functools import partial
 
@@ -41,59 +39,17 @@ def term_handler(signame, loop):
     else:
         log.info("Already stopping; ignoring signal ...")
 
-class StateStoreWrapper:
-    """
-    Wrapper for state store module.
-
-    On any exception from the state store module, log and exit.
-    """
-
-    def __init__(self, store):
-        self.store = store
-        self.is_closed = False
-
-    def __del__(self):
-        self.close()
-
-    def handle_events(self, events):
-        try:
-            self.store.handle_events(events)
-        except Exception:
-            log.exception("StateStoreError: error handling events.")
-            sys.exit(1)
-
-    def flush(self):
-        try:
-            self.store.flush()
-        except Exception:
-            log.exception("StateStoreError: Error flushing events")
-            sys.exit(1)
-
-    def close(self):
-        """
-        Close the underlying state store.
-        """
-
-        if self.is_closed:
-            return
-        self.is_closed = True
-
-        try:
-            self.store.close()
-        except Exception:
-            log.exception("StateStoreError: Error closing event database")
-            sys.exit(1)
-
 class Controller: # pylint: disable=too-many-instance-attributes
     """
     Controller object.
     """
 
-    def __init__(self, config, nodename, state_store, loop):
+    def __init__(self, config, nodename, loop):
         self.nodename = nodename
 
         self.num_controllers = len(config.sim_nodes)
         self.num_agentprocs = config.num_agentprocs[nodename]
+        self.num_storeprocs = config.num_storeprocs[nodename]
         self.num_rounds = config.num_rounds
 
         # Generate the seed for the current controller
@@ -106,8 +62,6 @@ class Controller: # pylint: disable=too-many-instance-attributes
         random.seed(self.controller_seed, version=2)
         self.agentproc_seeds = [randint() for _ in range(self.num_agentprocs)]
 
-        self.state_store = StateStoreWrapper(state_store)
-
         # The event loop
         self.loop = loop
 
@@ -117,7 +71,13 @@ class Controller: # pylint: disable=too-many-instance-attributes
         self.num_ap_waiting = 0
         self.num_cp_finished = 0
 
-        # Agent process queue
+        # Local and All events queue
+        self.ev_queue_local = asyncio.Queue(maxsize=0, loop=loop)
+        self.ev_queue_all = []
+        for _ in range(self.num_storeprocs):
+            self.ev_queue_all.append(asyncio.Queue(maxsize=0, loop=loop))
+
+        # Agent process queues
         self.ap_queue = asyncio.Queue(maxsize=self.num_agentprocs, loop=loop)
 
         # These attributes will be populated later
@@ -130,10 +90,10 @@ class Controller: # pylint: disable=too-many-instance-attributes
         """
         RPC method: Used by agent processes to retrive random seed.
 
-        agentproc_id: ID of the agent process [1, num_agentprocs on this node]
+        agentproc_id: index of the agent process (starts at 0)
         """
 
-        return self.agentproc_seeds[agentproc_id -1]
+        return self.agentproc_seeds[agentproc_id]
 
     async def can_we_start_yet(self):
         """
@@ -143,6 +103,10 @@ class Controller: # pylint: disable=too-many-instance-attributes
         self.num_ap_waiting += 1
         log.info(f"{self.num_ap_waiting}/{self.num_agentprocs} agent processes are waiting ...")
         if self.num_ap_waiting == self.num_agentprocs:
+            # Wait for local events queue to be empty
+            await self.ev_queue_local.join()
+
+            # Signal the other controllers that we are done
             await self.send_controller_finished(self.nodename)
 
         await self.ap_queue.get()
@@ -161,8 +125,19 @@ class Controller: # pylint: disable=too-many-instance-attributes
         """
 
         for event_chunk in sliced(events, EVENT_CHUNKSIZE):
-            await self.share_events(self.nodename, event_chunk)
+            await self.ev_queue_local.put(event_chunk)
         return True
+
+    async def fetch_events(self, storeproc_id):
+        """
+        RPC method: Used by store processes to retrieve generated events.
+
+        storeproc_id: index of the store process (starts at 0)
+        """
+
+        code, events = await self.ev_queue_all[storeproc_id].get()
+        self.ev_queue_all[storeproc_id].task_done()
+        return {"code": code, "events": events}
 
     async def store_events(self, nodename, events):
         """
@@ -171,7 +146,8 @@ class Controller: # pylint: disable=too-many-instance-attributes
         events: list of events.
         """
 
-        self.state_store.handle_events(events)
+        for i in range(self.num_storeprocs):
+            await self.ev_queue_all[i].put(("EVENTS", events))
 
     async def controller_finished(self, nodename):
         """
@@ -186,26 +162,60 @@ class Controller: # pylint: disable=too-many-instance-attributes
         if self.num_cp_finished != self.num_controllers:
             return
 
-        # Flush the store
-        # and reset the state
-        self.state_store.flush()
+        # Reset the state
         self.cur_round += 1
         self.num_ap_waiting = 0
         self.num_cp_finished = 0
+
+        # Add flush signal for the event queues
+        for i in range(self.num_storeprocs):
+            await self.ev_queue_all[i].put(("FLUSH", None))
+
+        # Wait for all events queue to be empty
+        for i in range(self.num_storeprocs):
+            await self.ev_queue_all[i].join()
 
         if self.is_sim_end():
             log.info("Simulation completed!")
         else:
             log.info(f"Round {self.cur_round}/{self.num_rounds} starting ...")
 
+        # Wake up the agent processes
         for _ in range(self.num_agentprocs):
             await self.ap_queue.put(None)
 
-        # If simulation has ended
-        # stop the event loop
-        # and flush the state store
         if self.is_sim_end():
+            # Send terminal to local event queue
+            # to stop the send_events loop
+            await self.ev_queue_local.put(None)
+
+            # Add simend signal for the event queues
+            for i in range(self.num_storeprocs):
+                await self.ev_queue_all[i].put(("SIMEND", None))
+
+            # Wait for local events queue to be empty
+            await self.ev_queue_local.join()
+
+            # Wait for all events queue to be empty
+            for i in range(self.num_storeprocs):
+                await self.ev_queue_all[i].join()
+
+            # Stop the main loop
             self.loop.stop()
+
+    async def share_events_loop(self):
+        """
+        Keep sharing events put in local events queue with rest of the controllers.
+        """
+
+        while True:
+            events = await self.ev_queue_local.get()
+            if events is None:
+                self.ev_queue_local.task_done()
+                break
+
+            await self.share_events(self.nodename, events)
+            self.ev_queue_local.task_done()
 
     def is_sim_end(self):
         """
@@ -225,6 +235,9 @@ class Controller: # pylint: disable=too-many-instance-attributes
             "can_we_start_yet": self.can_we_start_yet,
             "register_events": self.register_events,
 
+            # RPC methods used by store processes
+            "fetch_events": self.fetch_events,
+
             # RPC methods used by other contollers
             "store_events": self.store_events,
             "controller_finished": self.controller_finished
@@ -233,7 +246,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
         response = await rpc_dispatch(method_map, message)
         return response
 
-async def handle_agent_process(controller, reader, writer):
+async def handle_client_process(controller, reader, writer):
     """
     Callback handler, for new tcp connections from agents.
 
@@ -280,7 +293,6 @@ async def handle_broker_message(controller, channel, body, envelope, _properties
 
     # Send ack back to server
     await channel.basic_client_ack(delivery_tag=envelope.delivery_tag)
-
 
 async def share_events(nodename, events, chan, exchange_name):
     """
@@ -339,7 +351,7 @@ async def make_receiver_queue(callback, channel, config, nodename):
     await channel.basic_consume(callback, queue_name=queue_name)
     return queue
 
-async def do_startup(config, nodename, state_store, loop):
+async def do_startup(config, nodename, loop):
     """
     Start the matrix controller.
     """
@@ -355,7 +367,7 @@ async def do_startup(config, nodename, state_store, loop):
     log.info("Setting up event exchange ...")
     await snd_chan.exchange_declare(exchange_name=config.event_exchange, type_name='fanout')
 
-    controller = Controller(config, nodename, state_store, loop)
+    controller = Controller(config, nodename, loop)
     controller.share_events = partial(share_events,
                                       chan=snd_chan,
                                       exchange_name=config.event_exchange)
@@ -368,12 +380,15 @@ async def do_startup(config, nodename, state_store, loop):
         handler = partial(term_handler, signame=signame, loop=loop)
         loop.add_signal_handler(signum, handler)
 
+    log.info("Starting event share loop ...")
+    asyncio.ensure_future(controller.share_events_loop())
+
     log.info("Setting up AMQP receiver ...")
     bm_callback = partial(handle_broker_message, controller)
     await make_receiver_queue(bm_callback, rcv_chan, config, nodename)
 
     log.info(f"Starting local TCP server at 127.0.0.1:{port} ..." )
-    tcon_callback = partial(handle_agent_process, controller)
+    tcon_callback = partial(handle_client_process, controller)
     server = await asyncio.start_server(tcon_callback, "127.0.0.1", port, limit=BUFSIZE)
 
     return server, snd_trans, snd_proto, rcv_trans, rcv_proto
@@ -398,24 +413,9 @@ def main_controller(config, nodename):
     Controller process starting point.
     """
 
-    state_store_module = config.state_store_module
-    state_dsn = config.state_dsn[nodename]
-
-    try:
-        state_store_module = importlib.import_module(state_store_module)
-    except ImportError as e:
-        log.error(f"Failed to import state store module '{state_store_module}'\n{e}")
-        sys.exit(1)
-
-    try:
-        state_store = state_store_module.get_state_store(state_dsn)
-    except Exception: # pylint: disable=broad-except
-        log.exception("StateStoreError: Error obtaining state store object")
-        sys.exit(1)
-
     loop = asyncio.get_event_loop()
 
-    resources = loop.run_until_complete(do_startup(config, nodename, state_store, loop))
+    resources = loop.run_until_complete(do_startup(config, nodename, loop))
     loop.run_forever()
 
     log.info("Running cleaunup tasks ...")

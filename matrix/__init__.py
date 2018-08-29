@@ -39,17 +39,15 @@ def parse_config(config_fname, nodename=None):
         if node not in cfg.num_agentprocs:
             log.error(f"Number of agents on node {node} is not defined")
             sys.exit(1)
+        if node not in cfg.num_storeprocs:
+            log.error(f"Number of stores on node {node} is not defined")
+            sys.exit(1)
         if node not in cfg.controller_port:
             log.error(f"Controller port for node {node} is not defined")
-            sys.exit(1)
-        if node not in cfg.state_dsn:
-            log.error(f"Data store location for node {node} is not defined")
             sys.exit(1)
 
     if nodename is not None and nodename not in cfg.sim_nodes:
         log.error(f"Nodename not in configured node list")
         sys.exit(1)
-
-    cfg.state_dsn = {k: os.path.expandvars(v) for k, v in cfg.state_dsn.items()}
 
     return cfg

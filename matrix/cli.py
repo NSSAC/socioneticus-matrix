@@ -178,16 +178,16 @@ def updateconfig_rabbitmq(controller_config, rabbitmq_config, hostname):
               required=True,
               type=int,
               help="Number of agent processes per node")
-@click.option("-s", "--state-dsn",
+@click.option("-m", "--num-storeprocs",
               required=True,
-              type=str,
-              help="State datastore location")
+              type=int,
+              help="Number of store processes per node")
 @click.option("-o", "--controller-config",
               required=True,
               type=click.Path(exists=True, dir_okay=False),
               help="Controller configuration file")
 @click.argument("nodes", nargs=-1, type=str)
-def updateconfig_nodes(controller_port, num_agentprocs, state_dsn, controller_config, nodes):
+def updateconfig_nodes(controller_port, num_agentprocs, num_storeprocs, controller_config, nodes):
     """
     Add node specific stuff to controller configuration.
     """
@@ -202,7 +202,7 @@ def updateconfig_nodes(controller_port, num_agentprocs, state_dsn, controller_co
     ccfg["sim_nodes"] = list(nodes)
     ccfg["controller_port"] = {node: controller_port for node in nodes}
     ccfg["num_agentprocs"] = {node: num_agentprocs for node in nodes}
-    ccfg["state_dsn"]  = {node: state_dsn for node in nodes}
+    ccfg["num_storeprocs"] = {node: num_storeprocs for node in nodes}
 
     with open(controller_config, "wt") as fobj:
         yaml.dump(ccfg, fobj, default_flow_style=False)

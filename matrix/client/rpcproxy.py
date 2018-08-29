@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import logbook
 
-_log = logbook.Logger(__name__)
+log = logbook.Logger(__name__)
 
 class RPCException(Exception):
     pass
@@ -22,7 +22,7 @@ class RPCProxy: # pylint: disable=too-few-public-methods
         address = (host, port)
 
         address_str = ":".join(map(str, address))
-        _log.notice(f"Connecting to controller at: {address_str}")
+        log.notice(f"Connecting to controller at: {address_str}")
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect(address)
@@ -50,7 +50,7 @@ class RPCProxy: # pylint: disable=too-few-public-methods
         Call the remote function.
         """
 
-        _log.info("Calling method: {}", method)
+        log.info("Calling method: {}", method)
 
         msg = {
             "jsonrpc": "2.0",
@@ -58,12 +58,18 @@ class RPCProxy: # pylint: disable=too-few-public-methods
             "method": method,
             "params": params
         }
+        if __debug__:
+            log.debug("RPC ->\n{}", json.dumps(msg, indent=2, sort_keys=True))
+
         msg = json.dumps(msg) + "\n" # NOTE: The newline is important
         msg = msg.encode("ascii")
         self.sock.sendall(msg)
 
         ret = self.fobj.readline()
         ret = json.loads(ret)
+
+        if __debug__:
+            log.debug("RPC <-\n{}", json.dumps(ret, indent=2, sort_keys=True))
 
         if "jsonrpc" not in ret or ret["jsonrpc"] != "2.0":
             raise RPCException("Invalid RPC Response", ret)

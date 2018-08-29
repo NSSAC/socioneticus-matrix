@@ -1,12 +1,14 @@
 """
-BluePill state store module.
-
-This module serves as an example interface
-for building state store modules
-that play well with the controller.
+The BluePill store process.
 """
 
 import sqlite3
+
+import logbook
+
+from .rpcproxy import RPCProxy
+
+log = logbook.Logger(__name__)
 
 def event_sort_key(event):
     agent_id, _, round_num = event
@@ -22,27 +24,25 @@ class BluePillStore:
         self.con = sqlite3.connect(state_dsn)
         self.event_cache = []
 
-    # NOTE: The following three methods must be implemented
-    # by any state store objects.
-    # These methods will be called by the matrix.
-
     def handle_events(self, events):
         """
-        Handle the events coming from controller.
+        Handle incoming events.
         """
 
         self.event_cache.extend(events)
 
     def flush(self):
         """
-        Flush out any cached event.
+        Flush out cached events.
         """
 
         if not self.event_cache:
             return
 
+        log.info("Ordering {} events ...", len(self.event_cache))
         self.event_cache.sort(key=event_sort_key)
 
+        log.info("Applying {} events ...", len(self.event_cache))
         with self.con:
             cur = self.con.cursor()
             sql = "insert into event values (?,?,?)"
@@ -54,10 +54,6 @@ class BluePillStore:
     def close(self):
         self.flush()
         self.con.close()
-
-    # The following methods are used internally
-    # by the bluepill store implementation
-    # and the are not visible to the matrix.
 
     def initialize(self):
         """
@@ -73,13 +69,9 @@ class BluePillStore:
         """
         self.con.execute(sql)
 
-
     def get_prev_state(self, agent_id):
         """
         Get the last known state of the agent.
-
-        This method is used by bluepill agent
-        and is not called by the controller.
         """
 
         sql = """
@@ -97,19 +89,35 @@ class BluePillStore:
             return None
         return row[0]
 
-# NOTE: Implementing this factory function
-# is mandatory as this is how the matrix
-# creates the state store object.
-def get_state_store(state_dsn):
-    return BluePillStore(state_dsn)
-
-def main_store_init(**kwargs):
+def main_store_init(state_dsn):
     """
     Initialize the datastore.
     """
 
-    state_dsn = kwargs.pop("state_dsn")
-
     store = BluePillStore(state_dsn)
     store.initialize()
     store.close()
+
+def main_store(**kwargs):
+    """
+    The main state store process.
+    """
+
+    port = kwargs["ctrl_port"]
+    state_dsn = kwargs["state_dsn"]
+    storeproc_id = kwargs["storeproc_id"]
+
+    with RPCProxy("127.0.0.1", port) as proxy:
+        state_store = BluePillStore(state_dsn)
+
+        while True:
+            ret = proxy.call("fetch_events", storeproc_id=storeproc_id)
+            code = ret["code"]
+            if code == "EVENTS":
+                events = ret["events"]
+                state_store.handle_events(events)
+            elif code == "FLUSH":
+                state_store.flush()
+            elif code == "SIMEND":
+                state_store.close()
+                break

@@ -56,7 +56,7 @@ def rpc_error(message, request=None):
     if request is not None and "id" in request:
         response["id"] = request["id"]
 
-    return json.dumps(response)
+    return response
 
 def rpc_request(method, id=None, **params): # pylint: disable=redefined-builtin
     """

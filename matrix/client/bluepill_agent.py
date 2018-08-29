@@ -7,7 +7,7 @@ import random
 import logbook
 
 from .rpcproxy import RPCProxy
-from .bluepill_store import get_state_store
+from .bluepill_store import BluePillStore
 
 log = logbook.Logger(__name__)
 
@@ -49,7 +49,7 @@ def main_agent(**kwargs):
     num_agents = kwargs["num_agents"]
 
     with RPCProxy("127.0.0.1", port) as proxy:
-        state_store = get_state_store(state_dsn)
+        state_store = BluePillStore(state_dsn)
 
         agentproc_seed = proxy.call("get_agentproc_seed", agentproc_id=agentproc_id)
         random.seed(agentproc_seed)

@@ -9,7 +9,7 @@ import logbook
 from logbook.compat import redirect_logging
 from qz7.logbook import ColorLogFormatter, ChannelFilterHandler
 
-from .bluepill_store import main_store_init
+from .bluepill_store import main_store_init, main_store
 from .bluepill_agent import main_agent
 
 @click.group()
@@ -63,6 +63,26 @@ def store_init(**kwargs):
 
     main_store_init(**kwargs)
 
+@store.command("start")
+@click.option("-s", "--state-dsn",
+              required=True,
+              type=click.Path(dir_okay=False, writable=True),
+              help="System state data source name")
+@click.option("-p", "--ctrl-port",
+              required=True,
+              type=int,
+              help="Controller port")
+@click.option("-i", "--storeproc-id",
+              required=True,
+              type=int,
+              help="Store process id")
+def store_start(**kwargs):
+    """
+    Start a BluePill store process.
+    """
+
+    main_store(**kwargs)
+
 @cli.group()
 def agent():
     """
@@ -91,7 +111,7 @@ def agent():
               help="Number of agents this process simulates")
 def agent_start(**kwargs):
     """
-    Start a BluePill agent.
+    Start a BluePill agent process.
     """
 
     return main_agent(**kwargs)

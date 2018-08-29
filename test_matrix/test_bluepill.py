@@ -17,7 +17,6 @@ rabbitmq_password: user
 event_exchange: events
 
 root_seed: 42
-state_store_module: matrix.client.bluepill_store
 num_rounds: 10
 """
 
@@ -52,14 +51,15 @@ def do_test_bluepill(tempdir, popener, num_nodes, num_agentproc_range):
     cfg["sim_nodes"]       = [f"node{i}" for i in node_idxs]
     cfg["controller_port"] = {f"node{i}": 17001 + i for i in node_idxs}
     cfg["num_agentprocs"]  = {f"node{i}": random.randint(*num_agentproc_range) for i in node_idxs}
-    cfg["state_dsn"]       = {f"node{i}": tempdir / f"state{i}.db" for i in node_idxs}
+    cfg["num_storeprocs"]  = {f"node{i}": 1 for i in node_idxs}
+    cfg["_state_dsn"]      = {f"node{i}": tempdir / f"state{i}.db" for i in node_idxs}
 
     with open(config_fname, "wt") as fobj:
         fobj.write(yaml.dump(cfg))
 
     # Initialize all the event stores
     for node in cfg["sim_nodes"]:
-        state_dsn = cfg["state_dsn"][node]
+        state_dsn = cfg["_state_dsn"][node]
         cmd = f"bluepill store init -s {state_dsn}"
         assert popener(cmd, shell=True, output_prefix=f"storeinit-{node}").wait() == 0
 
@@ -79,29 +79,51 @@ def do_test_bluepill(tempdir, popener, num_nodes, num_agentproc_range):
 
     time.sleep(1)
 
+    # Start all the store processes
+    for node in cfg["sim_nodes"]:
+        state_dsn = cfg["_state_dsn"][node]
+        port = cfg["controller_port"][node]
+        num_storeprocs = cfg["num_storeprocs"][node]
+
+        for storeproc_id in range(num_storeprocs):
+            # Start bluepill agent process
+            cmd = f"bluepill store start -p {port} -s {state_dsn} -i {storeproc_id}"
+            storeproc = popener(cmd, shell=True, output_prefix=f"bluepill-store-{node}-{storeproc_id}")
+            all_procs.append(storeproc)
+
     # Start all the agent processes
     for node in cfg["sim_nodes"]:
-        state_dsn = cfg["state_dsn"][node]
+        state_dsn = cfg["_state_dsn"][node]
         port = cfg["controller_port"][node]
         num_agentprocs = cfg["num_agentprocs"][node]
 
-        for agentproc_id in range(1, num_agentprocs + 1):
+        for agentproc_id in range(num_agentprocs):
             # Start bluepill agent process
             cmd = f"bluepill agent start -n {node} -p {port} -s {state_dsn} -i {agentproc_id}"
-            agentproc = popener(cmd, shell=True, output_prefix=f"bluepill-{node}-{agentproc_id}")
+            agentproc = popener(cmd, shell=True, output_prefix=f"bluepill-agent-{node}-{agentproc_id}")
             all_procs.append(agentproc)
 
     # Wait for the processes to finish
-    for proc in all_procs:
-        assert proc.wait() == 0
+    ps = all_procs
+    while True:
+        nps = []
+        for p in ps:
+            retcode = p.poll()
+            assert retcode is None or retcode == 0
+            if retcode is None:
+                nps.append(p)
+        if not nps:
+            break
+        ps = nps
+        time.sleep(1)
 
     # Check the tables
     if num_nodes > 1:
         first_node = cfg["sim_nodes"][0]
-        first_state_dsn = cfg["state_dsn"][first_node]
+        first_state_dsn = cfg["_state_dsn"][first_node]
 
         rest_nodes = cfg["sim_nodes"][1:]
-        rest_state_dsns = [cfg["state_dsn"][n] for n in rest_nodes]
+        rest_state_dsns = [cfg["_state_dsn"][n] for n in rest_nodes]
 
         for rest_state_dsn in rest_state_dsns:
             assert_equal_event_tables(first_state_dsn, rest_state_dsn)

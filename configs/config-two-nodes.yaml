@@ -25,24 +25,14 @@ num_agentprocs:
     node1: 1
     node2: 1
 
-# The data store location
-# Environment variables can be used here
-state_dsn:
-    node1: $HOME/data/matrix_sims/events1.db
-    node2: $HOME/data/matrix_sims/events2.db
+# The number of store processes
+# that will run on each node
+num_storeprocs:
+    node1: 1
+    node2: 1
 
 # The root seed
 root_seed: 42
 
-# The state module to be used
-# for updating the event store
-state_store_module: matrix.dummystore
-
 # Number of rounds to run the simulation for
 num_rounds: 10
-
-# Starting time of the simulation
-start_time: 2017-08-17
-
-# The time a single round represents
-round_time: 1h
