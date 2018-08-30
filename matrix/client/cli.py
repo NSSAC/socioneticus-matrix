@@ -117,4 +117,4 @@ def agent_start(**kwargs):
     return main_agent(**kwargs)
 
 if __name__ == "__main__":
-    cli() # pylint: disable=no-value-for-parameter
+    cli(prog_name="bluepill") # pylint: disable=no-value-for-parameter

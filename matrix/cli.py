@@ -208,4 +208,4 @@ def updateconfig_nodes(controller_port, num_agentprocs, num_storeprocs, controll
         yaml.dump(ccfg, fobj, default_flow_style=False)
 
 if __name__ == "__main__":
-    cli() # pylint: disable=no-value-for-parameter
+    cli(prog_name="matrix") # pylint: disable=no-value-for-parameter
