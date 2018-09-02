@@ -1,5 +1,5 @@
 """
-Blue Pill: Matrix's in built agent and store inteface
+BluePill: Matrix's in built agent and store inteface
 """
 
 import click
@@ -46,7 +46,7 @@ def cli(ctx, debug, logtostderr):
 @cli.group()
 def store():
     """
-    The blue pill state store.
+    The BluePill state store.
     """
 
     pass
@@ -86,7 +86,7 @@ def store_start(**kwargs):
 @cli.group()
 def agent():
     """
-    The blue pill agent.
+    The BluePill agent.
     """
 
 @agent.command("start")
