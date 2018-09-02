@@ -18,6 +18,7 @@ setup(
         "pyyaml",
         "aioamqp",
         "blessings",
+        "more-itertools",
         "qz7-logbook",
     ],
 
