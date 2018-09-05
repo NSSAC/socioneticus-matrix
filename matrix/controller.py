@@ -128,7 +128,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
             await self.ev_queue_local.put(event_chunk)
         return True
 
-    async def fetch_events(self, storeproc_id):
+    async def get_events(self, storeproc_id):
         """
         RPC method: Used by store processes to retrieve generated events.
 
@@ -236,7 +236,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
             "register_events": self.register_events,
 
             # RPC methods used by store processes
-            "fetch_events": self.fetch_events,
+            "get_events": self.get_events,
 
             # RPC methods used by other contollers
             "store_events": self.store_events,

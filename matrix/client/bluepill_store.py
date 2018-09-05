@@ -111,7 +111,7 @@ def main_store(**kwargs):
         state_store = BluePillStore(state_dsn)
 
         while True:
-            ret = proxy.call("fetch_events", storeproc_id=storeproc_id)
+            ret = proxy.call("get_events", storeproc_id=storeproc_id)
             code = ret["code"]
             if code == "EVENTS":
                 events = ret["events"]
