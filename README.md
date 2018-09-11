@@ -41,8 +41,7 @@ After installation of Anaconda/Miniconda
 execute the following commands.
 
 ```
-$ conda create -n matrixenv python=3
-$ source activate matrixenv
+$ conda create -n matrixenv -c conda-forge rabbitmq-server python=3
 ```
 
 ### Install RabbitMQ
