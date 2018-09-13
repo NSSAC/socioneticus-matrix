@@ -5,7 +5,7 @@ setup(
     maintainer="Parantapa Bhattacharya",
     maintainer_email="paran@vt.edu",
 
-    packages=["matrix"],
+    packages=["matrix", "matrix.client"],
     scripts=["bin/matrix", "bin/bluepill"],
 
     use_scm_version=True,
