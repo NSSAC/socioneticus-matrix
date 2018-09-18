@@ -55,10 +55,10 @@ def main_agent(**kwargs):
         random.seed(agentproc_seed)
 
         while True:
-            round_info = proxy.call("can_we_start_yet")
+            round_info = proxy.call("can_we_start_yet", agentproc_id=agentproc_id)
             log.info(f"round {round_info['cur_round']} ...")
             if round_info["cur_round"] == -1:
                 return
 
             events = do_something(node, agentproc_id, num_agents, state_store, round_info)
-            proxy.call("register_events", events=events)
+            proxy.call("register_events", agentproc_id=agentproc_id, events=events)

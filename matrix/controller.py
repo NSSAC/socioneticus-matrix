@@ -93,12 +93,18 @@ class Controller: # pylint: disable=too-many-instance-attributes
         agentproc_id: index of the agent process (starts at 0)
         """
 
+        assert 0 <= agentproc_id < self.num_agentprocs
+
         return self.agentproc_seeds[agentproc_id]
 
-    async def can_we_start_yet(self):
+    async def can_we_start_yet(self, agentproc_id):
         """
         RPC method: Used by agent process to wait for start of current round.
+
+        agentproc_id: index of the agent process (starts at 0)
         """
+
+        assert 0 <= agentproc_id < self.num_agentprocs
 
         self.num_ap_waiting += 1
         log.info(f"{self.num_ap_waiting}/{self.num_agentprocs} agent processes are waiting ...")
@@ -117,12 +123,15 @@ class Controller: # pylint: disable=too-many-instance-attributes
 
         return { "cur_round": self.cur_round }
 
-    async def register_events(self, events):
+    async def register_events(self, agentproc_id, events):
         """
         RPC method: Used by agent processes to hand over generated events.
 
-        events: list of events.
+        agentproc_id: index of the agent process (starts at 0)
+        events: list of events
         """
+
+        assert 0 <= agentproc_id < self.num_agentprocs
 
         for event_chunk in sliced(events, EVENT_CHUNKSIZE):
             await self.ev_queue_local.put(event_chunk)
@@ -135,6 +144,8 @@ class Controller: # pylint: disable=too-many-instance-attributes
         storeproc_id: index of the store process (starts at 0)
         """
 
+        assert 0 <= storeproc_id < self.num_storeprocs
+
         code, events = await self.ev_queue_all[storeproc_id].get()
         self.ev_queue_all[storeproc_id].task_done()
         return {"code": code, "events": events}
@@ -143,7 +154,8 @@ class Controller: # pylint: disable=too-many-instance-attributes
         """
         RPC method: Used by other controllers to hand over events from their local node.
 
-        events: list of events.
+        nodename: name of the soruce controller
+        events: list of events
         """
 
         for i in range(self.num_storeprocs):
