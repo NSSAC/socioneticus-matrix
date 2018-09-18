@@ -80,11 +80,10 @@ class Controller: # pylint: disable=too-many-instance-attributes
         # Agent process queues
         self.ap_queue = asyncio.Queue(maxsize=self.num_agentprocs, loop=loop)
 
-        # These attributes will be populated later
+        # This attribute will be populated later
         # These should be bound to async functions
         # That can be used to send messages to the backend
-        self.share_events = None
-        self.send_controller_finished = None
+        self.send_message = None
 
     async def get_agentproc_seed(self, agentproc_id):
         """
@@ -113,7 +112,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
             await self.ev_queue_local.join()
 
             # Signal the other controllers that we are done
-            await self.send_controller_finished(self.nodename)
+            await self.send_message("controller_finished", nodename=self.nodename)
 
         await self.ap_queue.get()
         self.ap_queue.task_done()
@@ -226,7 +225,7 @@ class Controller: # pylint: disable=too-many-instance-attributes
                 self.ev_queue_local.task_done()
                 break
 
-            await self.share_events(self.nodename, events)
+            await self.send_message("store_events", nodename=self.nodename, events=events)
             self.ev_queue_local.task_done()
 
     def is_sim_end(self):
@@ -262,6 +261,7 @@ async def handle_client_process(controller, reader, writer):
     """
     Callback handler, for new tcp connections from agents.
 
+    controller: the controller object
     reader: async stream reader object
     writer: async stream writer object
     """
@@ -291,9 +291,9 @@ async def handle_broker_message(controller, channel, body, envelope, _properties
     """
     Callback handler, for messages from amqp broker.
 
-    controller  : the controller object.
+    controller  : the controller object
     channel     : channel from which message was received
-    body        : bytes object body of the message.
+    body        : bytes object body of the message
     envelope    : envelope
     _properties : properties
     """
@@ -306,34 +306,18 @@ async def handle_broker_message(controller, channel, body, envelope, _properties
     # Send ack back to server
     await channel.basic_client_ack(delivery_tag=envelope.delivery_tag)
 
-async def share_events(nodename, events, chan, exchange_name):
+async def send_broker_message(chan, exchange_name, method, **kwargs):
     """
-    Share the events with other controllers.
+    Send a message to the broker to be shared with all controllers.
     """
 
-    request = rpc_request("store_events", id=False,
-                          nodename=nodename,
-                          events=events)
+    request = rpc_request(method, id=False, **kwargs)
     request = json.dumps(request)
     request = request.encode("utf-8")
 
     await chan.basic_publish(request,
                              exchange_name=exchange_name,
-                             routing_key=nodename)
-
-async def send_controller_finished(nodename, chan, exchange_name):
-    """
-    Signal other controllers that this one has finished.
-    """
-
-    request = rpc_request("controller_finished", id=False,
-                          nodename=nodename)
-    request = json.dumps(request)
-    request = request.encode("utf-8")
-
-    await chan.basic_publish(request,
-                             exchange_name=exchange_name,
-                             routing_key=nodename)
+                             routing_key="*")
 
 async def make_amqp_channel(config):
     """
@@ -380,12 +364,9 @@ async def do_startup(config, nodename, loop):
     await snd_chan.exchange_declare(exchange_name=config.event_exchange, type_name='fanout')
 
     controller = Controller(config, nodename, loop)
-    controller.share_events = partial(share_events,
-                                      chan=snd_chan,
-                                      exchange_name=config.event_exchange)
-    controller.send_controller_finished = partial(send_controller_finished,
-                                                  chan=snd_chan,
-                                                  exchange_name=config.event_exchange)
+    controller.send_message = partial(send_broker_message,
+                                      snd_chan,
+                                      config.event_exchange)
 
     for signame in ["SIGINT", "SIGTERM", "SIGHUP"]:
         signum = getattr(signal, signame)
