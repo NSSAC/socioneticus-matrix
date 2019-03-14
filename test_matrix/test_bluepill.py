@@ -77,8 +77,6 @@ def do_test_bluepill(tempdir, popener, num_nodes, num_agentproc_range):
         controller = popener(cmd, shell=True, output_prefix=f"controller-{node}")
         all_procs.append(controller)
 
-    time.sleep(1)
-
     # Start all the store processes
     for node in cfg["sim_nodes"]:
         state_dsn = cfg["_state_dsn"][node]
