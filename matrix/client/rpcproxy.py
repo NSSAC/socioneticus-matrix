@@ -2,6 +2,7 @@
 Common utilites as needed by agent implementations.
 """
 
+import time
 import json
 import socket
 from uuid import uuid4
@@ -25,7 +26,22 @@ class RPCProxy: # pylint: disable=too-few-public-methods
         log.notice(f"Connecting to controller at: {address_str}")
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect(address)
+
+        timeout = 60
+        start = time.time()
+        while True:
+            try:
+                self.sock.connect(address)
+                break
+            except OSError as e:
+                log.info("Failed to connect to controller: {}", e)
+
+                since = time.time() - start
+                if since > timeout:
+                    raise RuntimeError("Failed to connect to controller")
+                else:
+                    time.sleep(5)
+
         self.fobj = self.sock.makefile(mode="r", encoding="ascii")
 
     def close(self):
