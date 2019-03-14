@@ -3,6 +3,7 @@ Matrix: Controller
 """
 # pylint: disable=broad-except
 
+import time
 import json
 import random
 import asyncio
@@ -324,11 +325,25 @@ async def make_amqp_channel(config):
     Create an async amqp channel.
     """
 
-    transport, protocol = await aioamqp.connect(
-        host=config.rabbitmq_host,
-        port=config.rabbitmq_port,
-        login=config.rabbitmq_username,
-        password=config.rabbitmq_password)
+    timeout = 60
+    start = time.time()
+    while True:
+        try:
+            transport, protocol = await aioamqp.connect(
+                host=config.rabbitmq_host,
+                port=config.rabbitmq_port,
+                login=config.rabbitmq_username,
+                password=config.rabbitmq_password)
+            break
+        except OSError as e:
+            log.info("Failed to connect to RabbitMQ: {}", e)
+
+            since = time.time() - start
+            if since > timeout:
+                raise RuntimeError("Failed to connect to RabbitMQ")
+            else:
+                time.sleep(5)
+
     channel = await protocol.channel()
     return transport, protocol, channel
 
