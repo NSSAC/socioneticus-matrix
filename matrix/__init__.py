@@ -28,7 +28,7 @@ def parse_config(config_fname, nodename=None):
     """
 
     with open(config_fname) as fobj:
-        cfg = yaml.load(fobj)
+        cfg = yaml.load(fobj, Loader=yaml.Loader)
     cfg = AttrDict(cfg)
 
     if len(set(cfg.sim_nodes)) != len(cfg.sim_nodes):

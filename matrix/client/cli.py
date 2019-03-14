@@ -4,10 +4,8 @@ BluePill: Matrix's in built agent and store inteface
 
 import click
 from attrdict import AttrDict
-from blessings import Terminal
 import logbook
 from logbook.compat import redirect_logging
-from qz7.logbook import ColorLogFormatter, ChannelFilterHandler
 
 from .bluepill_store import main_store_init, main_store
 from .bluepill_agent import main_agent
@@ -26,20 +24,16 @@ def cli(ctx, debug, logtostderr):
     """
 
     cfg = AttrDict()
-    cfg.terminal = Terminal()
 
     ctx.obj = cfg
 
     if logtostderr:
         if debug:
             handler = logbook.StderrHandler(logbook.DEBUG)
-            handler.formatter = ColorLogFormatter(cfg.terminal)
             handler.push_application()
         else:
             handler = logbook.StderrHandler(logbook.INFO)
-            handler.formatter = ColorLogFormatter(cfg.terminal)
             handler.push_application()
-            ChannelFilterHandler(["aioamqp.protocol"]).push_application()
 
         redirect_logging()
 

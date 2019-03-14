@@ -17,9 +17,7 @@ setup(
         "attrdict",
         "pyyaml",
         "aioamqp",
-        "blessings",
         "more-itertools",
-        "qz7-logbook",
     ],
 
     description="An modeling framework for social agent simuation.",

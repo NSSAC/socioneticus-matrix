@@ -45,7 +45,7 @@ def do_test_bluepill(tempdir, popener, num_nodes, num_agentproc_range):
 
     # Generate confguration for the controller
     config_fname = tempdir / "controller-config.yaml"
-    cfg = yaml.load(CONFIG_BASE)
+    cfg = yaml.load(CONFIG_BASE, Loader=yaml.Loader)
 
     node_idxs              = range(num_nodes)
     cfg["sim_nodes"]       = [f"node{i}" for i in node_idxs]

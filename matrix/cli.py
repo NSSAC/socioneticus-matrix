@@ -8,10 +8,8 @@ import configparser
 import yaml
 import click
 from attrdict import AttrDict
-from blessings import Terminal
 import logbook
 from logbook.compat import redirect_logging
-from qz7.logbook import ColorLogFormatter, ChannelFilterHandler
 
 from . import parse_config
 
@@ -35,20 +33,15 @@ def cli(ctx, debug, logtostderr):
     """
 
     cfg = AttrDict()
-    cfg.terminal = Terminal()
-
     ctx.obj = cfg
 
     if logtostderr:
         if debug:
             handler = logbook.StderrHandler(logbook.DEBUG)
-            handler.formatter = ColorLogFormatter(cfg.terminal)
             handler.push_application()
         else:
             handler = logbook.StderrHandler(logbook.INFO)
-            handler.formatter = ColorLogFormatter(cfg.terminal)
             handler.push_application()
-            ChannelFilterHandler(["aioamqp.protocol"]).push_application()
 
         redirect_logging()
 
@@ -151,7 +144,7 @@ def updateconfig_rabbitmq(controller_config, rabbitmq_config, hostname):
     """
 
     with open(controller_config, "rt") as fobj:
-        ccfg = yaml.load(fobj)
+        ccfg = yaml.load(fobj, Loader=yaml.Loader)
 
     with open(rabbitmq_config, "rt") as fobj:
         rcfg = configparser.ConfigParser()
@@ -197,7 +190,7 @@ def updateconfig_nodes(controller_port, num_agentprocs, num_storeprocs, controll
         sys.exit(1)
 
     with open(controller_config, "rt") as fobj:
-        ccfg = yaml.load(fobj)
+        ccfg = yaml.load(fobj, Loader=yaml.Loader)
 
     ccfg["sim_nodes"] = list(nodes)
     ccfg["controller_port"] = {node: controller_port for node in nodes}
