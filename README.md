@@ -91,7 +91,6 @@ favorite text editor, with the following content.
 ```
 default_user = user
 default_pass = user
-listeners.tcp.1 = 0.0.0.0:5672
 ```
 
 Also in ~/matrixsim, create a file called matrix.yaml
