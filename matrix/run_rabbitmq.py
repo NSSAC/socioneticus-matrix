@@ -9,13 +9,13 @@ import signal
 from pathlib import Path
 from subprocess import Popen, TimeoutExpired
 from contextlib import contextmanager
-import configparser
 
 import logbook
 
 log = logbook.Logger(__name__)
 
 TERM_SIGNALS = ["SIGINT", "SIGQUIT", "SIGHUP", "SIGTERM"]
+RECEIVED_TERM_SIGNAL = False
 
 def wait_and_kill(proc, timeout=5.0):
     """
@@ -77,7 +77,10 @@ def cleanup(signame):
         Handle the signal.
         """
 
+        global RECEIVED_TERM_SIGNAL
+
         log.info("Received {}", signame)
+        RECEIVED_TERM_SIGNAL = True
 
     return do_cleanup
 
@@ -98,14 +101,6 @@ def startup(config_fname, mnesia_base, hostname, pid_fname):
 
     with epmd_context() as epmd:
         with rabbitmq_context() as rabbitmq:
-
-            if epmd.poll() is not None:
-                log.error("Epmd exited prematurely with returncode: {}", epmd.poll())
-                sys.exit(1)
-            if rabbitmq.poll() is not None:
-                log.error("Rabbitmq exited prematurely with returncode: {}", rabbitmq.poll())
-                sys.exit(1)
-
             # Setup handlers for signals
             for signame in TERM_SIGNALS:
                 signal.signal(getattr(signal, signame), cleanup(signame))
@@ -115,8 +110,21 @@ def startup(config_fname, mnesia_base, hostname, pid_fname):
                 fobj.write(str(os.getpid()))
             try:
                 log.info("Waiting for term signal ...")
-                signal.pause()
-                log.info("Term signal received ...")
+
+                while True:
+                    if epmd.poll() is not None:
+                        log.error("Epmd exited prematurely with returncode: {}", epmd.poll())
+                        sys.exit(1)
+
+                    if rabbitmq.poll() is not None:
+                        log.error("Rabbitmq exited prematurely with returncode: {}", rabbitmq.poll())
+                        sys.exit(1)
+
+                    if RECEIVED_TERM_SIGNAL:
+                        log.info("Term signal received ...")
+                        sys.exit(0)
+
+                    time.sleep(5)
             finally:
                 log.info("Removing pid file: {}", pid_fname)
                 pid_fname.unlink()
