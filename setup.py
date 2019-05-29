@@ -18,6 +18,7 @@ setup(
         "pyyaml",
         "aioamqp",
         "more-itertools",
+        "sortedcontainers"
     ],
 
     description="An modeling framework for social agent simuation.",
