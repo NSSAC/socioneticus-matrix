@@ -1,13 +1,16 @@
 """
 Sqlite3 store process code.
 
-Every update is a 3 tuple: (store_type, store_dsn, order_key, update)
+This module connects to the Matrix controller,
+and retrieves updates using the get_events RPC call.
+
+Every update is a 4 tuple: (store_type, store_id, order_key, update)
 
 `store_type' defines the type of the store.
 For sqlite3_store, store_type should always be "sqlite3"
 
-`store_dsn' defines the location of the store object.
-For sqlite3_store, store_dsn is the path to the sqlite3 file.
+`store_id' is an string identifier representing a store object.
+For sqlite3_store, store_id is a string representing a sqlite3 database.
 
 `order_key' enforces the order in which the updates are applied to the store.
 If there are two updates with order_key ok1 and ok2 such that ok1 < ok2
@@ -34,26 +37,38 @@ def get_first(xs):
 
 class Sqlite3Store:
     """
-    Class for storing stuff.
+    Sqlite3 data store.
+
+    Attributes:
+        store_dsn: Path of the sqlite3 database file
+        store_id: ID of the sqlite3 database file
+        con: sqlite3 connection object
+        update_cache: sorted list of updates
     """
 
-    def __init__(self, store_dsn):
+    def __init__(self, store_dsn, store_id):
         self.store_dsn = store_dsn
+        self.store_id = store_id
+
         self.con = sqlite3.connect(store_dsn)
         self.update_cache = SortedList(key=get_first)
 
     def handle_updates(self, updates):
         """
         Handle incoming updates.
+
+        Args:
+            updates: list of update 4 tuples.
         """
 
-        for store_type, store_dsn, order_key, update in updates:
+        for store_type, store_id, order_key, update in updates:
             if store_type != "sqlite3":
                 continue
-            if store_dsn != self.store_dsn:
+            if store_id != self.store_id:
                 continue
 
-            self.update_cache.add((order_key, update))
+            sql, params = update
+            self.update_cache.add((order_key, sql, params))
 
     def flush(self):
         """
@@ -66,11 +81,11 @@ class Sqlite3Store:
         log.info("Applying {} updates ...", len(self.update_cache))
         with self.con:
             cur = self.con.cursor()
-            for _, (sql, params) in self.update_cache:
+            for _, sql, params in self.update_cache:
                 if params is None:
                     cur.execute(sql)
                 else:
-                    cur.execute(sql, params)
+                    cur.execute(sql, tuple(params))
 
         self.update_cache = SortedList(key=get_first)
 
@@ -78,23 +93,25 @@ class Sqlite3Store:
         self.flush()
         self.con.close()
 
-def main_sqlite3_store(**kwargs):
+def main_sqlite3_store(store_dsn, store_id, controller_port, storeproc_id):
     """
-    The main state store process.
+    Sqlite3 store process starting point.
+
+    Args:
+        store_dsn: Path of the sqlite3 database file
+        store_id: ID of the sqlite3 database file
+        controller_port: Port of the Matrix controller process
+        storeproc_id: ID of the current store process
     """
 
-    port = kwargs["ctrl_port"]
-    store_dsn = kwargs["store_dsn"]
-    storeproc_id = kwargs["storeproc_id"]
-
-    with RPCProxy("127.0.0.1", port) as proxy:
-        state_store = Sqlite3Store(store_dsn)
+    with RPCProxy("127.0.0.1", controller_port) as proxy:
+        state_store = Sqlite3Store(store_dsn, store_id)
 
         while True:
-            ret = proxy.call("get_updates", storeproc_id=storeproc_id)
+            ret = proxy.call("get_events", storeproc_id=storeproc_id)
             code = ret["code"]
-            if code == "UPDATES":
-                updates = ret["updates"]
+            if code == "EVENTS":
+                updates = ret["events"]
                 state_store.handle_updates(updates)
             elif code == "FLUSH":
                 state_store.flush()

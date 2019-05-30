@@ -16,6 +16,7 @@ from . import parse_config
 from .controller import main_controller
 from .eventlog import main_eventlog
 from .run_rabbitmq import main_rabbitmq_start, main_rabbitmq_stop
+from .client.sqlite3_store import main_sqlite3_store
 
 log = logbook.Logger(__name__)
 
@@ -62,6 +63,31 @@ def controller(config, nodename):
     cfg = parse_config(config, nodename)
 
     return main_controller(cfg, nodename)
+
+
+@cli.command("sqlite3-store")
+@click.option("-s", "--store-dsn",
+              required=True,
+              type=click.Path(dir_okay=False, writable=True),
+              help="Path to the sqlite3 file")
+@click.option("-d", "--store-id",
+              required=True,
+              type=str,
+              help="ID of the sqlite3 file")
+@click.option("-p", "--controller-port",
+              required=True,
+              type=int,
+              help="Controller port")
+@click.option("-i", "--storeproc-id",
+              required=True,
+              type=int,
+              help="Store process id")
+def sqlite3_store(**kwargs):
+    """
+    Start a sqlite3 store process.
+    """
+
+    main_sqlite3_store(**kwargs)
 
 @cli.command()
 @click.option("-c", "--config",
@@ -201,4 +227,4 @@ def updateconfig_nodes(controller_port, num_agentprocs, num_storeprocs, controll
         yaml.dump(ccfg, fobj, default_flow_style=False)
 
 if __name__ == "__main__":
-    cli(prog_name="matrix") # pylint: disable=no-value-for-parameter
+    cli(prog_name="matrix") #pylint: disable=no-value-for-parameter,unexpected-keyword-arg
