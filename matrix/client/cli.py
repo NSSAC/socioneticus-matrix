@@ -1,5 +1,5 @@
 """
-BluePill: Matrix's in built agent and store inteface
+BluePill: Matrix's in built agent
 """
 
 import click
@@ -7,8 +7,7 @@ from attrdict import AttrDict
 import logbook
 from logbook.compat import redirect_logging
 
-from .bluepill_store import main_store_init, main_store
-from .bluepill_agent import main_agent
+from .bluepill_agent import main_agent, main_store_init
 
 @click.group()
 @click.option('--debug/--no-debug',
@@ -20,7 +19,7 @@ from .bluepill_agent import main_agent
 @click.pass_context
 def cli(ctx, debug, logtostderr):
     """
-    Bluepill agents and stores.
+    Bluepill agents.
     """
 
     cfg = AttrDict()
@@ -37,19 +36,11 @@ def cli(ctx, debug, logtostderr):
 
         redirect_logging()
 
-@cli.group()
-def store():
-    """
-    The BluePill state store.
-    """
-
-    pass
-
-@store.command("init")
-@click.option("-s", "--state-dsn",
+@cli.command("store-init")
+@click.option("-s", "--store-dsn",
               required=True,
               type=click.Path(dir_okay=False, writable=True),
-              help="System state data source name")
+              help="State store data source name")
 def store_init(**kwargs):
     """
     Initialize the BluePill store.
@@ -57,33 +48,7 @@ def store_init(**kwargs):
 
     main_store_init(**kwargs)
 
-@store.command("start")
-@click.option("-s", "--state-dsn",
-              required=True,
-              type=click.Path(dir_okay=False, writable=True),
-              help="System state data source name")
-@click.option("-p", "--ctrl-port",
-              required=True,
-              type=int,
-              help="Controller port")
-@click.option("-i", "--storeproc-id",
-              required=True,
-              type=int,
-              help="Store process id")
-def store_start(**kwargs):
-    """
-    Start a BluePill store process.
-    """
-
-    main_store(**kwargs)
-
-@cli.group()
-def agent():
-    """
-    The BluePill agent.
-    """
-
-@agent.command("start")
+@cli.command("agent-start")
 @click.option("-n", "--ctrl-node",
               required=True,
               type=str,
@@ -92,10 +57,10 @@ def agent():
               required=True,
               type=int,
               help="Controller port")
-@click.option("-s", "--state-dsn",
+@click.option("-s", "--store-dsn",
               required=True,
               type=click.Path(exists=True, dir_okay=False, writable=True),
-              help="System state data source name")
+              help="State store data source name")
 @click.option("-i", "--agentproc-id",
               required=True,
               type=int,
