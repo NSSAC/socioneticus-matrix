@@ -60,7 +60,7 @@ def do_test_bluepill(tempdir, popener, num_nodes, num_agentproc_range):
     # Initialize all the event stores
     for node in cfg["sim_nodes"]:
         state_dsn = cfg["_state_dsn"][node]
-        cmd = f"bluepill store init -s {state_dsn}"
+        cmd = f"bluepill store-init -s {state_dsn}"
         assert popener(cmd, shell=True, output_prefix=f"storeinit-{node}").wait() == 0
 
     all_procs = []
@@ -85,7 +85,7 @@ def do_test_bluepill(tempdir, popener, num_nodes, num_agentproc_range):
 
         for storeproc_id in range(num_storeprocs):
             # Start bluepill agent process
-            cmd = f"bluepill store start -p {port} -s {state_dsn} -i {storeproc_id}"
+            cmd = f"matrix sqlite3-store -p {port} -s {state_dsn} -d event_store -i {storeproc_id}"
             storeproc = popener(cmd, shell=True, output_prefix=f"bluepill-store-{node}-{storeproc_id}")
             all_procs.append(storeproc)
 
@@ -97,7 +97,7 @@ def do_test_bluepill(tempdir, popener, num_nodes, num_agentproc_range):
 
         for agentproc_id in range(num_agentprocs):
             # Start bluepill agent process
-            cmd = f"bluepill agent start -n {node} -p {port} -s {state_dsn} -i {agentproc_id}"
+            cmd = f"bluepill agent-start -n {node} -p {port} -s {state_dsn} -i {agentproc_id}"
             agentproc = popener(cmd, shell=True, output_prefix=f"bluepill-agent-{node}-{agentproc_id}")
             all_procs.append(agentproc)
 
@@ -107,7 +107,12 @@ def do_test_bluepill(tempdir, popener, num_nodes, num_agentproc_range):
         nps = []
         for p in ps:
             retcode = p.poll()
-            assert retcode is None or retcode == 0
+            try:
+                assert retcode is None or retcode == 0
+            except AssertionError:
+                print("Failed process: %s" % p.args)
+                raise
+
             if retcode is None:
                 nps.append(p)
         if not nps:
