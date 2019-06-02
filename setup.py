@@ -1,9 +1,15 @@
 from setuptools import setup
 
 setup(
-    name="Matrix",
-    maintainer="Parantapa Bhattacharya",
-    maintainer_email="paran@vt.edu",
+    name="socioneticus-matrix",
+    description="An modeling framework for social agent simuation.",
+
+    author="Parantapa Bhattacharya",
+    author_email="parantapa@virginia.edu",
+
+
+    long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
 
     packages=["matrix", "matrix.client"],
     scripts=["bin/matrix", "bin/bluepill"],
@@ -12,7 +18,7 @@ setup(
     setup_requires=['setuptools_scm'],
 
     install_requires=[
-        "Click",
+        "click",
         "logbook",
         "attrdict",
         "pyyaml",
@@ -21,6 +27,10 @@ setup(
         "sortedcontainers"
     ],
 
-    description="An modeling framework for social agent simuation.",
-    url="https://ndsslgit.vbi.vt.edu/social-sim-darpa/matrix",
+    url="http://github.com/NSSAC/socioneticus-matrix",
+    classifiers=(
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+    ),
 )
