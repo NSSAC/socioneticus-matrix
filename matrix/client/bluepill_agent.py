@@ -11,6 +11,7 @@ from .rpcproxy import RPCProxy
 
 log = logbook.Logger(__name__)
 
+
 def get_prev_state(con, agent_id):
     """
     Get the last known state of the agent.
@@ -31,11 +32,11 @@ def get_prev_state(con, agent_id):
         return None
     return row[0]
 
+
 def do_something(nodename, agentproc_id, num_agents, con, round_info):
     """
     Generate the updates for the current round.
     """
-
 
     updates = []
     for agent_idx in range(num_agents):
@@ -44,22 +45,22 @@ def do_something(nodename, agentproc_id, num_agents, con, round_info):
         if prev_state is None:
             prev_state = random.choice(["rock", "paper", "scissors"])
 
-        cur_state = {
-            "rock": "paper",
-            "paper": "scissors",
-            "scissors": "rock"
-        }[prev_state]
+        cur_state = {"rock": "paper", "paper": "scissors", "scissors": "rock"}[
+            prev_state
+        ]
 
         sql = "insert into event values (?,?,?)"
         update = (
-            "sqlite3", "event_store",
+            "sqlite3",
+            "event_store",
             (agent_id, round_info["cur_round"]),
-            (sql, (agent_id, cur_state, round_info["cur_round"]))
+            (sql, (agent_id, cur_state, round_info["cur_round"])),
         )
 
         updates.append(update)
 
     return updates
+
 
 def main_agent(**kwargs):
     """
@@ -89,6 +90,7 @@ def main_agent(**kwargs):
 
             updates = do_something(node, agentproc_id, num_agents, con, round_info)
             proxy.call("register_events", agentproc_id=agentproc_id, events=updates)
+
 
 def main_store_init(store_dsn):
     """

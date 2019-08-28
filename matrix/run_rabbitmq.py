@@ -17,6 +17,7 @@ log = logbook.Logger(__name__)
 TERM_SIGNALS = ["SIGINT", "SIGQUIT", "SIGHUP", "SIGTERM"]
 RECEIVED_TERM_SIGNAL = False
 
+
 def wait_and_kill(proc, timeout=5.0):
     """
     Wait for the proc to finish cleanly or kill.
@@ -32,6 +33,7 @@ def wait_and_kill(proc, timeout=5.0):
             proc.kill()
 
     return proc.poll()
+
 
 @contextmanager
 def epmd_context():
@@ -50,6 +52,7 @@ def epmd_context():
         wait_and_kill(epmd_kill)
         wait_and_kill(epmd)
 
+
 @contextmanager
 def rabbitmq_context():
     """
@@ -67,12 +70,13 @@ def rabbitmq_context():
         wait_and_kill(rabbitmq_shutdown, timeout=60)
         wait_and_kill(rabbitmq)
 
+
 def cleanup(signame):
     """
     Return the cleanup function for this signal.
     """
 
-    def do_cleanup(*args): # pylint: disable=unused-argument
+    def do_cleanup(*args):  # pylint: disable=unused-argument
         """
         Handle the signal.
         """
@@ -83,6 +87,7 @@ def cleanup(signame):
         RECEIVED_TERM_SIGNAL = True
 
     return do_cleanup
+
 
 def startup(config_fname, mnesia_base, hostname, pid_fname):
     """
@@ -113,11 +118,16 @@ def startup(config_fname, mnesia_base, hostname, pid_fname):
 
                 while True:
                     if epmd.poll() is not None:
-                        log.error("Epmd exited prematurely with returncode: {}", epmd.poll())
+                        log.error(
+                            "Epmd exited prematurely with returncode: {}", epmd.poll()
+                        )
                         sys.exit(1)
 
                     if rabbitmq.poll() is not None:
-                        log.error("Rabbitmq exited prematurely with returncode: {}", rabbitmq.poll())
+                        log.error(
+                            "Rabbitmq exited prematurely with returncode: {}",
+                            rabbitmq.poll(),
+                        )
                         sys.exit(1)
 
                     if RECEIVED_TERM_SIGNAL:
@@ -128,6 +138,7 @@ def startup(config_fname, mnesia_base, hostname, pid_fname):
             finally:
                 log.info("Removing pid file: {}", pid_fname)
                 pid_fname.unlink()
+
 
 def main_rabbitmq_start(config_fname, runtime_dir, hostname):
     """
@@ -155,6 +166,7 @@ def main_rabbitmq_start(config_fname, runtime_dir, hostname):
         pid_fname.unlink()
 
     startup(config_fname, mnesia_base, hostname, pid_fname)
+
 
 def main_rabbitmq_stop(runtime_dir):
     """

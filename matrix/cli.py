@@ -20,13 +20,14 @@ from .client.sqlite3_store import main_sqlite3_store
 
 log = logbook.Logger(__name__)
 
+
 @click.group()
-@click.option('--debug/--no-debug',
-              default=False,
-              help="Enable/disable debug logging")
-@click.option('--logtostderr/--no-logtostderr',
-              default=True,
-              help="Enable/disable logging to stderr")
+@click.option("--debug/--no-debug", default=False, help="Enable/disable debug logging")
+@click.option(
+    "--logtostderr/--no-logtostderr",
+    default=True,
+    help="Enable/disable logging to stderr",
+)
 @click.pass_context
 def cli(ctx, debug, logtostderr):
     """
@@ -46,15 +47,16 @@ def cli(ctx, debug, logtostderr):
 
         redirect_logging()
 
+
 @cli.command()
-@click.option("-c", "--config",
-              required=True,
-              type=click.Path(exists=True, dir_okay=False),
-              help="Controller configuration file")
-@click.option("-n", "--nodename",
-              required=True,
-              type=str,
-              help="Controller nodename")
+@click.option(
+    "-c",
+    "--config",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Controller configuration file",
+)
+@click.option("-n", "--nodename", required=True, type=str, help="Controller nodename")
 def controller(config, nodename):
     """
     Start a controller process.
@@ -66,22 +68,20 @@ def controller(config, nodename):
 
 
 @cli.command("sqlite3-store")
-@click.option("-s", "--store-dsn",
-              required=True,
-              type=click.Path(dir_okay=False, writable=True),
-              help="Path to the sqlite3 file")
-@click.option("-d", "--store-id",
-              required=True,
-              type=str,
-              help="ID of the sqlite3 file")
-@click.option("-p", "--controller-port",
-              required=True,
-              type=int,
-              help="Controller port")
-@click.option("-i", "--storeproc-id",
-              required=True,
-              type=int,
-              help="Store process id")
+@click.option(
+    "-s",
+    "--store-dsn",
+    required=True,
+    type=click.Path(dir_okay=False, writable=True),
+    help="Path to the sqlite3 file",
+)
+@click.option(
+    "-d", "--store-id", required=True, type=str, help="ID of the sqlite3 file"
+)
+@click.option(
+    "-p", "--controller-port", required=True, type=int, help="Controller port"
+)
+@click.option("-i", "--storeproc-id", required=True, type=int, help="Store process id")
 def sqlite3_store(**kwargs):
     """
     Start a sqlite3 store process.
@@ -89,15 +89,22 @@ def sqlite3_store(**kwargs):
 
     main_sqlite3_store(**kwargs)
 
+
 @cli.command()
-@click.option("-c", "--config",
-              required=True,
-              type=click.Path(exists=True, dir_okay=False),
-              help="Controller configuration file")
-@click.option("-o", "--output",
-              required=True,
-              type=click.Path(exists=False, dir_okay=False),
-              help="Event log file")
+@click.option(
+    "-c",
+    "--config",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Controller configuration file",
+)
+@click.option(
+    "-o",
+    "--output",
+    required=True,
+    type=click.Path(exists=False, dir_okay=False),
+    help="Event log file",
+)
 def eventlog(config, output):
     """
     Start the event log collecter.
@@ -113,19 +120,25 @@ def rabbitmq():
     Start/stop rabbitmq.
     """
 
+
 @rabbitmq.command("start")
-@click.option("-c", "--config",
-              required=True,
-              type=click.Path(exists=True, dir_okay=False),
-              help="Rabbitmq configuration file")
-@click.option("-r", "--runtime-dir",
-              required=True,
-              type=click.Path(exists=True, file_okay=False, dir_okay=True),
-              help="Rabbitmq runtime directory")
-@click.option("-h", "--hostname",
-              required=True,
-              type=str,
-              help="Hostname for rabbitmq to bind to")
+@click.option(
+    "-c",
+    "--config",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Rabbitmq configuration file",
+)
+@click.option(
+    "-r",
+    "--runtime-dir",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    help="Rabbitmq runtime directory",
+)
+@click.option(
+    "-h", "--hostname", required=True, type=str, help="Hostname for rabbitmq to bind to"
+)
 def rabbitmq_start(config, runtime_dir, hostname):
     """
     Start the rabbitmq server.
@@ -133,11 +146,15 @@ def rabbitmq_start(config, runtime_dir, hostname):
 
     main_rabbitmq_start(config, runtime_dir, hostname)
 
+
 @rabbitmq.command("stop")
-@click.option("-r", "--runtime-dir",
-              required=True,
-              type=click.Path(exists=True, file_okay=False, dir_okay=True),
-              help="Rabbitmq runtime directory")
+@click.option(
+    "-r",
+    "--runtime-dir",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    help="Rabbitmq runtime directory",
+)
 def rabbitmq_stop(runtime_dir):
     """
     Stop the rabbitmq server.
@@ -145,25 +162,36 @@ def rabbitmq_stop(runtime_dir):
 
     main_rabbitmq_stop(runtime_dir)
 
+
 @cli.group()
 def updateconfig():
     """
     Update controller configuration file.
     """
 
+
 @updateconfig.command("rabbitmq")
-@click.option("-i", "--rabbitmq-config",
-              required=True,
-              type=click.Path(exists=True, dir_okay=False),
-              help="Rabbitmq configuration file")
-@click.option("-h", "--hostname",
-              required=True,
-              type=str,
-              help="Hostname where rabbitmq is running")
-@click.option("-o", "--controller-config",
-              required=True,
-              type=click.Path(exists=True, dir_okay=False),
-              help="Controller configuration file")
+@click.option(
+    "-i",
+    "--rabbitmq-config",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Rabbitmq configuration file",
+)
+@click.option(
+    "-h",
+    "--hostname",
+    required=True,
+    type=str,
+    help="Hostname where rabbitmq is running",
+)
+@click.option(
+    "-o",
+    "--controller-config",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Controller configuration file",
+)
 def updateconfig_rabbitmq(controller_config, rabbitmq_config, hostname):
     """
     Add rabbitmq details to controller configuration.
@@ -188,25 +216,40 @@ def updateconfig_rabbitmq(controller_config, rabbitmq_config, hostname):
     with open(controller_config, "wt") as fobj:
         yaml.dump(ccfg, fobj, default_flow_style=False)
 
+
 @updateconfig.command("nodes")
-@click.option("-p", "--controller-port",
-              required=True,
-              type=int,
-              help="Port where controller will be running")
-@click.option("-n", "--num-agentprocs",
-              required=True,
-              type=int,
-              help="Number of agent processes per node")
-@click.option("-m", "--num-storeprocs",
-              required=True,
-              type=int,
-              help="Number of store processes per node")
-@click.option("-o", "--controller-config",
-              required=True,
-              type=click.Path(exists=True, dir_okay=False),
-              help="Controller configuration file")
+@click.option(
+    "-p",
+    "--controller-port",
+    required=True,
+    type=int,
+    help="Port where controller will be running",
+)
+@click.option(
+    "-n",
+    "--num-agentprocs",
+    required=True,
+    type=int,
+    help="Number of agent processes per node",
+)
+@click.option(
+    "-m",
+    "--num-storeprocs",
+    required=True,
+    type=int,
+    help="Number of store processes per node",
+)
+@click.option(
+    "-o",
+    "--controller-config",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Controller configuration file",
+)
 @click.argument("nodes", nargs=-1, type=str)
-def updateconfig_nodes(controller_port, num_agentprocs, num_storeprocs, controller_config, nodes):
+def updateconfig_nodes(
+    controller_port, num_agentprocs, num_storeprocs, controller_config, nodes
+):
     """
     Add node specific stuff to controller configuration.
     """
@@ -226,5 +269,8 @@ def updateconfig_nodes(controller_port, num_agentprocs, num_storeprocs, controll
     with open(controller_config, "wt") as fobj:
         yaml.dump(ccfg, fobj, default_flow_style=False)
 
+
 if __name__ == "__main__":
-    cli(prog_name="matrix") #pylint: disable=no-value-for-parameter,unexpected-keyword-arg
+    # pylint: disable=no-value-for-parameter
+    # pylint: disable=unexpected-keyword-arg
+    cli(prog_name="matrix")

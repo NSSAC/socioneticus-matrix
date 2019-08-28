@@ -1,7 +1,6 @@
 """
 Matrix: Controller
 """
-# pylint: disable=broad-except
 
 import time
 import json
@@ -22,8 +21,10 @@ BUFSIZE = 16 * 2 ** 30
 RECEIVED_TERM = False
 EVENT_CHUNKSIZE = 1000
 
+
 def randint():
     return random.randint(0, 2 ** 32 - 1)
+
 
 def term_handler(signame, loop):
     """
@@ -40,7 +41,8 @@ def term_handler(signame, loop):
     else:
         log.info("Already stopping; ignoring signal ...")
 
-class Controller: # pylint: disable=too-many-instance-attributes
+
+class Controller:
     """
     Controller object.
     """
@@ -107,7 +109,9 @@ class Controller: # pylint: disable=too-many-instance-attributes
         assert 0 <= agentproc_id < self.num_agentprocs
 
         self.num_ap_waiting += 1
-        log.info(f"{self.num_ap_waiting}/{self.num_agentprocs} agent processes are waiting ...")
+        log.info(
+            f"{self.num_ap_waiting}/{self.num_agentprocs} agent processes are waiting ..."
+        )
         if self.num_ap_waiting == self.num_agentprocs:
             # Wait for local events queue to be empty
             await self.ev_queue_local.join()
@@ -119,9 +123,9 @@ class Controller: # pylint: disable=too-many-instance-attributes
         self.ap_queue.task_done()
 
         if self.is_sim_end():
-            return { "cur_round": -1 }
+            return {"cur_round": -1}
 
-        return { "cur_round": self.cur_round }
+        return {"cur_round": self.cur_round}
 
     async def register_events(self, agentproc_id, events):
         """
@@ -169,7 +173,9 @@ class Controller: # pylint: disable=too-many-instance-attributes
         """
 
         self.num_cp_finished += 1
-        log.info(f"{self.num_cp_finished}/{self.num_controllers} controllers are waiting ...")
+        log.info(
+            f"{self.num_cp_finished}/{self.num_controllers} controllers are waiting ..."
+        )
 
         if self.num_cp_finished != self.num_controllers:
             return
@@ -226,7 +232,9 @@ class Controller: # pylint: disable=too-many-instance-attributes
                 self.ev_queue_local.task_done()
                 break
 
-            await self.send_message("store_events", nodename=self.nodename, events=events)
+            await self.send_message(
+                "store_events", nodename=self.nodename, events=events
+            )
             self.ev_queue_local.task_done()
 
     def is_sim_end(self):
@@ -246,17 +254,16 @@ class Controller: # pylint: disable=too-many-instance-attributes
             "get_agentproc_seed": self.get_agentproc_seed,
             "can_we_start_yet": self.can_we_start_yet,
             "register_events": self.register_events,
-
             # RPC methods used by store processes
             "get_events": self.get_events,
-
             # RPC methods used by other contollers
             "store_events": self.store_events,
-            "controller_finished": self.controller_finished
+            "controller_finished": self.controller_finished,
         }
 
         response = await rpc_dispatch(method_map, message)
         return response
+
 
 async def handle_client_process(controller, reader, writer):
     """
@@ -267,7 +274,7 @@ async def handle_client_process(controller, reader, writer):
     writer: async stream writer object
     """
 
-    address = writer.get_extra_info('peername')
+    address = writer.get_extra_info("peername")
     address_str = ":".join(map(str, address))
     log.info(f"New connection from {address_str}")
 
@@ -280,13 +287,14 @@ async def handle_client_process(controller, reader, writer):
         response = await controller.dispatch(line)
         assert response is not None
 
-        response = json.dumps(response) + "\n" # NOTE: The newline important
+        response = json.dumps(response) + "\n"  # NOTE: The newline important
         response = response.encode("ascii")
 
         writer.write(response)
         await writer.drain()
 
     log.info(f"{address_str} disconnected")
+
 
 async def handle_broker_message(controller, channel, body, envelope, _properties):
     """
@@ -307,6 +315,7 @@ async def handle_broker_message(controller, channel, body, envelope, _properties
     # Send ack back to server
     await channel.basic_client_ack(delivery_tag=envelope.delivery_tag)
 
+
 async def send_broker_message(chan, exchange_name, method, **kwargs):
     """
     Send a message to the broker to be shared with all controllers.
@@ -316,9 +325,8 @@ async def send_broker_message(chan, exchange_name, method, **kwargs):
     request = json.dumps(request)
     request = request.encode("utf-8")
 
-    await chan.basic_publish(request,
-                             exchange_name=exchange_name,
-                             routing_key="*")
+    await chan.basic_publish(request, exchange_name=exchange_name, routing_key="*")
+
 
 async def make_amqp_channel(config):
     """
@@ -333,7 +341,8 @@ async def make_amqp_channel(config):
                 host=config.rabbitmq_host,
                 port=config.rabbitmq_port,
                 login=config.rabbitmq_username,
-                password=config.rabbitmq_password)
+                password=config.rabbitmq_password,
+            )
             break
         except OSError as e:
             log.info("Failed to connect to RabbitMQ: {}", e)
@@ -347,6 +356,7 @@ async def make_amqp_channel(config):
     channel = await protocol.channel()
     return transport, protocol, channel
 
+
 async def make_receiver_queue(callback, channel, config, nodename):
     """
     Make the receiver queue and bind to topics.
@@ -355,12 +365,13 @@ async def make_receiver_queue(callback, channel, config, nodename):
     queue = await channel.queue_declare("", exclusive=True)
     queue_name = queue["queue"]
 
-    await channel.queue_bind(exchange_name=config.event_exchange,
-                             queue_name=queue_name,
-                             routing_key=nodename)
+    await channel.queue_bind(
+        exchange_name=config.event_exchange, queue_name=queue_name, routing_key=nodename
+    )
 
     await channel.basic_consume(callback, queue_name=queue_name)
     return queue
+
 
 async def do_startup(config, nodename, loop):
     """
@@ -376,12 +387,14 @@ async def do_startup(config, nodename, loop):
     rcv_trans, rcv_proto, rcv_chan = await make_amqp_channel(config)
 
     log.info("Setting up event exchange ...")
-    await snd_chan.exchange_declare(exchange_name=config.event_exchange, type_name='fanout')
+    await snd_chan.exchange_declare(
+        exchange_name=config.event_exchange, type_name="fanout"
+    )
 
     controller = Controller(config, nodename, loop)
-    controller.send_message = partial(send_broker_message,
-                                      snd_chan,
-                                      config.event_exchange)
+    controller.send_message = partial(
+        send_broker_message, snd_chan, config.event_exchange
+    )
 
     for signame in ["SIGINT", "SIGTERM", "SIGHUP"]:
         signum = getattr(signal, signame)
@@ -395,11 +408,12 @@ async def do_startup(config, nodename, loop):
     bm_callback = partial(handle_broker_message, controller)
     await make_receiver_queue(bm_callback, rcv_chan, config, nodename)
 
-    log.info(f"Starting local TCP server at 127.0.0.1:{port} ..." )
+    log.info(f"Starting local TCP server at 127.0.0.1:{port} ...")
     tcon_callback = partial(handle_client_process, controller)
     server = await asyncio.start_server(tcon_callback, "127.0.0.1", port, limit=BUFSIZE)
 
     return server, snd_trans, snd_proto, rcv_trans, rcv_proto
+
 
 async def do_cleanup(server, snd_trans, snd_proto, rcv_trans, rcv_proto):
     """
@@ -415,6 +429,7 @@ async def do_cleanup(server, snd_trans, snd_proto, rcv_trans, rcv_proto):
     await rcv_proto.close()
     snd_trans.close()
     rcv_trans.close()
+
 
 def main_controller(config, nodename):
     """

@@ -11,6 +11,7 @@ import logbook
 
 log = logbook.Logger(__name__)
 
+
 def rpc_parse(line):
     """
     Parse a jsonrpc request and check correctness.
@@ -43,31 +44,26 @@ def rpc_parse(line):
 
     return request, None
 
+
 def rpc_error(message, request=None):
     """
     Generate the rpc error message.
     """
 
-    response = {
-        "jsonrpc": "2.0",
-        "error": str(message)
-    }
+    response = {"jsonrpc": "2.0", "error": str(message)}
 
     if request is not None and "id" in request:
         response["id"] = request["id"]
 
     return response
 
-def rpc_request(method, id=None, **params): # pylint: disable=redefined-builtin
+
+def rpc_request(method, id=None, **params):  # pylint: disable=redefined-builtin
     """
     Generate the rpc request message.
     """
 
-    request = {
-        "jsonrpc": "2.0",
-        "method": method,
-        "params": params
-    }
+    request = {"jsonrpc": "2.0", "method": method, "params": params}
 
     if id is None:
         request["id"] = str(uuid4())
@@ -78,6 +74,7 @@ def rpc_request(method, id=None, **params): # pylint: disable=redefined-builtin
 
     return request
 
+
 def rpc_response(result, request):
     """
     Generate the response message.
@@ -86,13 +83,10 @@ def rpc_response(result, request):
     if "id" not in request:
         return None
 
-    response = {
-        "jsonrpc": "2.0",
-        "result": result,
-        "id": request["id"]
-    }
+    response = {"jsonrpc": "2.0", "result": result, "id": request["id"]}
 
     return response
+
 
 async def rpc_dispatch(method_map, line):
     """
@@ -111,7 +105,7 @@ async def rpc_dispatch(method_map, line):
         params = request["params"]
         if isinstance(params, list):
             args, kwargs = params, {}
-        else: # isinstance(params, dict)
+        else:  # isinstance(params, dict)
             args, kwargs = [], params
     else:
         args, kwargs = [], {}

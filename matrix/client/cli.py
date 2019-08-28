@@ -9,13 +9,14 @@ from logbook.compat import redirect_logging
 
 from .bluepill_agent import main_agent, main_store_init
 
+
 @click.group()
-@click.option('--debug/--no-debug',
-              default=False,
-              help="Enable/disable debug logging")
-@click.option('--logtostderr/--no-logtostderr',
-              default=True,
-              help="Enable/disable logging to stderr")
+@click.option("--debug/--no-debug", default=False, help="Enable/disable debug logging")
+@click.option(
+    "--logtostderr/--no-logtostderr",
+    default=True,
+    help="Enable/disable logging to stderr",
+)
 @click.pass_context
 def cli(ctx, debug, logtostderr):
     """
@@ -36,11 +37,15 @@ def cli(ctx, debug, logtostderr):
 
         redirect_logging()
 
+
 @cli.command("store-init")
-@click.option("-s", "--store-dsn",
-              required=True,
-              type=click.Path(dir_okay=False, writable=True),
-              help="State store data source name")
+@click.option(
+    "-s",
+    "--store-dsn",
+    required=True,
+    type=click.Path(dir_okay=False, writable=True),
+    help="State store data source name",
+)
 def store_init(**kwargs):
     """
     Initialize the BluePill store.
@@ -48,26 +53,21 @@ def store_init(**kwargs):
 
     main_store_init(**kwargs)
 
+
 @cli.command("agent-start")
-@click.option("-n", "--ctrl-node",
-              required=True,
-              type=str,
-              help="Controller node name")
-@click.option("-p", "--ctrl-port",
-              required=True,
-              type=int,
-              help="Controller port")
-@click.option("-s", "--store-dsn",
-              required=True,
-              type=click.Path(exists=True, dir_okay=False, writable=True),
-              help="State store data source name")
-@click.option("-i", "--agentproc-id",
-              required=True,
-              type=int,
-              help="Agent process id")
-@click.option("-m", "--num-agents",
-              default=1,
-              help="Number of agents this process simulates")
+@click.option("-n", "--ctrl-node", required=True, type=str, help="Controller node name")
+@click.option("-p", "--ctrl-port", required=True, type=int, help="Controller port")
+@click.option(
+    "-s",
+    "--store-dsn",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, writable=True),
+    help="State store data source name",
+)
+@click.option("-i", "--agentproc-id", required=True, type=int, help="Agent process id")
+@click.option(
+    "-m", "--num-agents", default=1, help="Number of agents this process simulates"
+)
 def agent_start(**kwargs):
     """
     Start a BluePill agent process.
@@ -75,5 +75,6 @@ def agent_start(**kwargs):
 
     return main_agent(**kwargs)
 
+
 if __name__ == "__main__":
-    cli(prog_name="bluepill") # pylint: disable=no-value-for-parameter
+    cli(prog_name="bluepill")  # pylint: disable=no-value-for-parameter

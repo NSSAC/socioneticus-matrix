@@ -14,11 +14,12 @@ from .controller import (
     make_amqp_channel,
     make_receiver_queue,
     term_handler,
-    handle_broker_message
+    handle_broker_message,
 )
 from .json_rpc import rpc_dispatch
 
 log = logbook.Logger(__name__)
+
 
 class EventLogger:
     """
@@ -54,7 +55,9 @@ class EventLogger:
         """
 
         self.num_cp_finished += 1
-        log.info(f"{self.num_cp_finished}/{self.num_controllers} controllers are waiting ...")
+        log.info(
+            f"{self.num_cp_finished}/{self.num_controllers} controllers are waiting ..."
+        )
 
         if self.num_cp_finished != self.num_controllers:
             return
@@ -86,11 +89,12 @@ class EventLogger:
         method_map = {
             # RPC methods used by other contollers
             "store_events": self.store_events,
-            "controller_finished": self.controller_finished
+            "controller_finished": self.controller_finished,
         }
 
         response = await rpc_dispatch(method_map, message)
         return response
+
 
 async def do_startup(config, output_fname, event_loop):
     """
@@ -101,7 +105,9 @@ async def do_startup(config, output_fname, event_loop):
     rcv_trans, rcv_proto, rcv_chan = await make_amqp_channel(config)
 
     log.info("Setting up event exchange ...")
-    await rcv_chan.exchange_declare(exchange_name=config.event_exchange, type_name='fanout')
+    await rcv_chan.exchange_declare(
+        exchange_name=config.event_exchange, type_name="fanout"
+    )
 
     logger = EventLogger(config, output_fname, event_loop)
 
@@ -116,6 +122,7 @@ async def do_startup(config, output_fname, event_loop):
 
     return rcv_trans, rcv_proto
 
+
 async def do_cleanup(rcv_trans, rcv_proto):
     """
     Cleanup the running processes.
@@ -124,6 +131,7 @@ async def do_cleanup(rcv_trans, rcv_proto):
     log.info("Closing AMQP receive channel ...")
     await rcv_proto.close()
     rcv_trans.close()
+
 
 def main_eventlog(config, output_fname):
     """

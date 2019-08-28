@@ -32,8 +32,10 @@ from .rpcproxy import RPCProxy
 
 log = logbook.Logger(__name__)
 
+
 def get_first(xs):
     return xs[0]
+
 
 class Sqlite3Store:
     """
@@ -92,6 +94,7 @@ class Sqlite3Store:
     def close(self):
         self.flush()
         self.con.close()
+
 
 def main_sqlite3_store(store_dsn, store_id, controller_port, storeproc_id):
     """

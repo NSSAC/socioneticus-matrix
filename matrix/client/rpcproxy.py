@@ -11,10 +11,12 @@ import logbook
 
 log = logbook.Logger(__name__)
 
+
 class RPCException(Exception):
     pass
 
-class RPCProxy: # pylint: disable=too-few-public-methods
+
+class RPCProxy:  # pylint: disable=too-few-public-methods
     """
     RPC Proxy class for calling controller functions.
     """
@@ -68,16 +70,11 @@ class RPCProxy: # pylint: disable=too-few-public-methods
 
         log.info("Calling method: {}", method)
 
-        msg = {
-            "jsonrpc": "2.0",
-            "id": str(uuid4()),
-            "method": method,
-            "params": params
-        }
+        msg = {"jsonrpc": "2.0", "id": str(uuid4()), "method": method, "params": params}
         if __debug__:
             log.debug("RPC ->\n{}", json.dumps(msg, indent=2, sort_keys=True))
 
-        msg = json.dumps(msg) + "\n" # NOTE: The newline is important
+        msg = json.dumps(msg) + "\n"  # NOTE: The newline is important
         msg = msg.encode("ascii")
         self.sock.sendall(msg)
 

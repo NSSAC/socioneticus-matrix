@@ -18,9 +18,10 @@ except DistributionNotFound:
     # package is not installed
     pass
 
-INTERVAL_SUFFIXES = { "s": 1, "m": 60, "h": 3600, "d": 86400 }
+INTERVAL_SUFFIXES = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 
 log = logbook.Logger(__name__)
+
 
 def parse_config(config_fname, nodename=None):
     """
