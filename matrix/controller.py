@@ -31,7 +31,7 @@ def term_handler(signame, loop):
     Signal handler for term signals.
     """
 
-    global RECEIVED_TERM
+    global RECEIVED_TERM  # pylint: disable=global-statement
 
     log.info(f"Received {signame}")
 

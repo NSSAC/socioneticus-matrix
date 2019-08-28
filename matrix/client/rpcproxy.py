@@ -16,7 +16,7 @@ class RPCException(Exception):
     pass
 
 
-class RPCProxy:  # pylint: disable=too-few-public-methods
+class RPCProxy:
     """
     RPC Proxy class for calling controller functions.
     """

@@ -77,4 +77,5 @@ def agent_start(**kwargs):
 
 
 if __name__ == "__main__":
-    cli(prog_name="bluepill")  # pylint: disable=no-value-for-parameter
+    # pylint: disable=no-value-for-parameter,unexpected-keyword-arg
+    cli(prog_name="bluepill")

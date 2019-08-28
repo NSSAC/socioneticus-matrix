@@ -1,8 +1,6 @@
 """
 Methods to implement jsonrpc over asyncio.
 """
-# pylint: disable=broad-except
-# pylint: disable=too-many-return-statements
 
 import json
 from uuid import uuid4
@@ -112,7 +110,7 @@ async def rpc_dispatch(method_map, line):
 
     try:
         response = await method_map[method](*args, **kwargs)
-    except Exception as e:
+    except Exception as e:  # pylint disable=broad-except
         log.exception(f"Error dispatching {method}")
         return rpc_error(e, request)
 

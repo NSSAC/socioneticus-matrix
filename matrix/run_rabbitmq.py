@@ -81,7 +81,7 @@ def cleanup(signame):
         Handle the signal.
         """
 
-        global RECEIVED_TERM_SIGNAL
+        global RECEIVED_TERM_SIGNAL  # pylint: disable=global-statement
 
         log.info("Received {}", signame)
         RECEIVED_TERM_SIGNAL = True

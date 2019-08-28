@@ -2,10 +2,7 @@
 Matrix: CLI Interface
 """
 
-import os
 import sys
-from datetime import datetime, date
-from calendar import timegm
 
 import yaml
 from attrdict import AttrDict
