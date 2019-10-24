@@ -297,20 +297,24 @@ async def handle_client_process(controller, reader, writer):
     address_str = ":".join(map(str, address))
     log.info(f"New connection from {address_str}")
 
-    while True:
-        line = await reader.readline()
-        if not line:
-            break
-        line = line.decode("ascii")
+    try:
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            line = line.decode("ascii")
 
-        response = await controller.dispatch(line)
-        assert response is not None
+            response = await controller.dispatch(line)
+            assert response is not None
 
-        response = json.dumps(response) + "\n"  # NOTE: The newline important
-        response = response.encode("ascii")
+            response = json.dumps(response) + "\n"  # NOTE: The newline important
+            response = response.encode("ascii")
 
-        writer.write(response)
-        await writer.drain()
+            writer.write(response)
+            await writer.drain()
+    except asyncio.CancelledError:
+        log.info("Stopping client connection from {}", address_str)
+        return
 
     log.info(f"{address_str} disconnected")
 
@@ -467,4 +471,5 @@ def main_controller(config, nodename):
     for task in pending_tasks:
         if not task.done():
             task.cancel()
+            loop.run_until_complete(task)
     loop.close()
