@@ -107,6 +107,7 @@ class Controller:
         """
 
         assert 0 <= agentproc_id < self.num_agentprocs
+        log.debug("Received CAN_WE_START_YET from agentproc {}", agentproc_id)
 
         self.num_ap_waiting += 1
         log.info(
@@ -125,6 +126,7 @@ class Controller:
         if self.is_sim_end():
             return {"cur_round": -1}
 
+        log.debug("Sending CAN_START to agentproc {} (round {})", agentproc_id, self.cur_round)
         return {"cur_round": self.cur_round}
 
     async def register_events(self, agentproc_id, events):
@@ -149,9 +151,12 @@ class Controller:
         """
 
         assert 0 <= storeproc_id < self.num_storeprocs
+        log.debug("Received GET_EVENTS from storeproc {}", storeproc_id)
 
         code, events = await self.ev_queue_all[storeproc_id].get()
         self.ev_queue_all[storeproc_id].task_done()
+
+        log.debug("Sending {} to storeproc {}", code, storeproc_id)
         return {"code": code, "events": events}
 
     async def store_events(self, nodename, events):
