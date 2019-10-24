@@ -72,7 +72,10 @@ class Controller:
         # are the only mutable part of the class.
         self.cur_round = 0
         self.num_ap_waiting = 0
+        self.num_sp_waiting = 0
         self.num_cp_finished = 0
+
+        self.all_sp_waiting = asyncio.Event()
 
         # Local and All events queue
         self.ev_queue_local = asyncio.Queue(maxsize=0, loop=loop)
@@ -153,8 +156,15 @@ class Controller:
         assert 0 <= storeproc_id < self.num_storeprocs
         log.debug("Received GET_EVENTS from storeproc {}", storeproc_id)
 
+        self.num_sp_waiting += 1
+        if self.num_sp_waiting == self.num_storeprocs:
+            self.all_sp_waiting.set()
+
         code, events = await self.ev_queue_all[storeproc_id].get()
         self.ev_queue_all[storeproc_id].task_done()
+
+        self.all_sp_waiting.clear()
+        self.num_sp_waiting -= 1
 
         log.debug("Sending {} to storeproc {}", code, storeproc_id)
         return {"code": code, "events": events}
@@ -190,13 +200,17 @@ class Controller:
         self.num_ap_waiting = 0
         self.num_cp_finished = 0
 
-        # Add flush signal for the event queues
-        for i in range(self.num_storeprocs):
-            await self.ev_queue_all[i].put(("FLUSH", None))
+        if self.cur_round > 1:
+            # Add flush signal for the event queues
+            for i in range(self.num_storeprocs):
+                await self.ev_queue_all[i].put(("FLUSH", None))
 
-        # Wait for all events queue to be empty
-        for i in range(self.num_storeprocs):
-            await self.ev_queue_all[i].join()
+            # Wait for all events queue to be empty
+            for i in range(self.num_storeprocs):
+                await self.ev_queue_all[i].join()
+
+        # Wait for all store processes to be waiting
+        await self.all_sp_waiting.wait()
 
         if self.is_sim_end():
             log.info("Simulation completed!")
